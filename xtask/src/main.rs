@@ -45,13 +45,13 @@ enum Args {
         /// Calculate prime numbers in a range. (In debug mode slows down by 100 million.)
         Primes {
                 /// Calculate all primes till some number
-                primes_till: Option<usize>,
+                primes_until: Option<usize>,
                 /// Only show primes above this number
                 #[arg(short = 'n', long = "min")]
-                primes_from: Option<usize>,
+                primes_from:  Option<usize>,
                 /// Show all primes found
                 #[arg(short, long)]
-                show:        bool,
+                show:         bool,
         },
 }
 
@@ -109,13 +109,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 100. * (found_primes.len() as f32) / (upper_bound as f32 + 2.)
                         );
                 }
-                Args::Primes { primes_till, primes_from, show } => {
+                Args::Primes { primes_until: primes_till, primes_from, show } => {
                         const DEFAULT_PRIMES_TILL: usize = 12_345;
                         let primes_from_or_default = primes_from.unwrap_or(0);
                         let primes_till_or_default = match primes_till {
                                 None => {
                                         println!(
-                                                "Hi from scratch_prime.rs.  No primes_till given, defaulting to : {}",
+                                                "No `{}` input given, defaulting to : {}",
+                                                "primes_until".green(),
                                                 DEFAULT_PRIMES_TILL.cyan()
                                         );
                                         DEFAULT_PRIMES_TILL
