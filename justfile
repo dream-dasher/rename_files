@@ -123,6 +123,14 @@ rust-meta-info:
     rust-analyzer --version
     cargo-clippy --version
     rustup --version
+
+# ######################################################################## #
+
+# Access to any cargo-xtask commands. Listed for discoverability.
+[group('xtask')]
+x *args:
+    -cargo xtask {{args}}
+
 # ######################################################################## #
 
 # Print reminder: how to set env vars that propagate to child shells.
