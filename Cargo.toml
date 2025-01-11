@@ -117,7 +117,7 @@ test-log = { version = "0.2.16", features = ["trace"] }
 quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 ## __Snapshot Testing__
-insta = { version = "1.41.1", ff = [
+insta = { version = "1.41.1", features = [
   "clap",
   "csv",
   "json",

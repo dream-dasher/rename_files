@@ -101,7 +101,7 @@ test-log = { workspace = true, features = ["trace"] }
 quickcheck = { workspace = true }
 quickcheck_macros = { workspace = true }
 ## __Snapshot Testing__
-insta = { workspace = true, ff = [
+insta = { workspace = true, features = [
     "clap",
     "csv",
     "json",
