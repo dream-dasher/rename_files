@@ -98,6 +98,7 @@ egui_inbox = "0.7.0"
 # ### - Data -
 jiff = { version = "0.1.16", features = ["js", "logging", "serde"] }
 # ### - Math -
+faer = "0.20.2"
 rand = "0.8.5"
 
 ## --Parsing--

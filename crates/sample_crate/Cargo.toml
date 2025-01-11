@@ -81,6 +81,7 @@ egui_inbox = { workspace = true }
 # ### - Data -
 jiff = { workspace = true, features = ["js", "logging", "serde"] }
 # ### - Math -
+faer = { workspace = true }
 rand = { workspace = true }
 
 ## --Parsing--
