@@ -14,6 +14,7 @@ futures = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 ### - Remote -
 reqwest = { workspace = true, features = ["blocking", "json"] }
+sqlx = { version = "0.8.3", features = ["sqlite", "runtime-tokio", "tls-rustls"] }
 
 ## --Diagnostics--
 tracing = { workspace = true, features = [] }
@@ -79,7 +80,7 @@ egui_inbox = { workspace = true }
 
 # ## --Math & Science--
 # ### - Data -
-jiff = { workspace = true, features = ["js", "logging", "serde"] }
+# polars = { workspace = true, features = [] }
 # ### - Math -
 faer = { workspace = true }
 rand = { workspace = true }
@@ -89,6 +90,9 @@ regex = { workspace = true, features = ["logging"] }
 monostate = { workspace = true }                     # serde: constraining, zero-sized type
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+
+## --Time--
+jiff = { workspace = true, features = ["js", "logging", "serde"] }
 
 
 [dev-dependencies]

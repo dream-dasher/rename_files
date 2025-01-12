@@ -31,6 +31,7 @@ futures = "0.3.31"
 tokio = { version = "1.42.0", features = ["full"] }
 ### - Remote -
 reqwest = { version = "0.12.9", features = ["blocking", "json"] }
+sqlx = { version = "0.8.3", features = ["sqlite", "runtime-tokio", "tls-rustls"] }
 
 ## --Diagnostics--
 tracing = { version = "0.1.41", features = [] }
@@ -96,7 +97,7 @@ egui_inbox = "0.7.0"
 
 # ## --Math & Science--
 # ### - Data -
-jiff = { version = "0.1.16", features = ["js", "logging", "serde"] }
+# polars = { version = "0.45.1", features = [] }
 # ### - Math -
 faer = "0.20.2"
 rand = "0.8.5"
@@ -107,6 +108,8 @@ monostate = "0.1.13"  # serde: constraining, zero-sized type
 serde = { version = "1.0.215", features = ["derive"] }
 serde_json = "1.0.133"
 
+## --Time--
+jiff = { version = "0.1.16", features = ["js", "logging", "serde"] }
 
 # Dev-Dependencies
 ##__Benchmarking__
