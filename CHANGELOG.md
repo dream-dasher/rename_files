@@ -60,7 +60,7 @@ All notable changes to this project will be documented in this file.
 
 - Imp. gitignore `no.?sync` patterns and docs
 - Minor version bump, inp flag change
-- *(runner)* Remote deploy command, assumes dist beign used
+- *(runner)* Remote deploy command, assumes dist being used
 - Lockfile
 - *(runner)* Check fallible, check dep for dep
 

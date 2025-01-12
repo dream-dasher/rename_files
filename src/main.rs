@@ -7,7 +7,7 @@
 //! ```
 
 use clap::Parser;
-use rename_files::{app, error::Result, logging, Args};
+use rename_files::{Args, app, error::Result, logging};
 
 fn main() -> Result<()> {
         logging::tracing_subscribe_boilerplate("warn");
