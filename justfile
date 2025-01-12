@@ -48,8 +48,10 @@ init: && list-external-deps _gen-env _gen-git-hooks
 
 # Linting, formatting, typo checking, etc.
 check:
+    cargo verify-project
     cargo check --workspace --all-targets --all-features
     cargo clippy --workspace --all-targets --all-features
+    cargo test --workspace --all-features --no-run
     cargo fmt
     typos
     committed
@@ -70,7 +72,7 @@ packadd name:
 # All tests, little feedback unless issues are detected.
 [group('test')]
 test:
-    cargo test --doc
+    cargo test --workspace --all-features --doc
     cargo nextest run --cargo-quiet --cargo-quiet --no-fail-fast
 
 # Runtests for a specific package.
@@ -123,6 +125,14 @@ rust-meta-info:
     rust-analyzer --version
     cargo-clippy --version
     rustup --version
+
+# ######################################################################## #
+
+# Access to any cargo-xtask commands. Listed for discoverability.
+[group('xtask')]
+x *args:
+    -cargo xtask {{args}}
+
 # ######################################################################## #
 
 # Print reminder: how to set env vars that propagate to child shells.
