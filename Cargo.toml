@@ -2,7 +2,7 @@
 name = "rename_files"
 version = "0.4.4"
 authors = ["Ethan Skowronski-Lutz"]
-edition = "2021"
+edition = "2024"
 repository = "https://github.com/ethanmsl/rename_files"
 homepage = "https://ethanmsl.github.io/rename_files/"
 categories = ["command-line-utilities", "file-system", "text-processing"]
