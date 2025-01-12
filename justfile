@@ -1,38 +1,136 @@
 # Justfile (Convenience Command Runner)
 
-# local vars
-LOCAL_VAR_EXAMPLE:='yes, I am!'
-
 # rust vars
-RUST_LOG:= 'debug'
-RUST_BACKTRACE:= '1'
-RUSTFLAGS:='--cfg tokio_unstable'
-TOML_VERSION:=`rg '^version = ".*"' Cargo.toml | sd '.*"(.*)".*' '$1'`
-
-# home_dir := env_var('HOME')
-local_root := justfile_directory()
-invocd_from := invocation_directory()
-invoc_is_root := if invocd_from == local_root { "true" } else { "false" }
-FROZE_SHA_REGEX := 'FROZE_[a-fA-F0-9]{64}_FROZE-'
-## ANSI Color Codes for use with echo command
-GRN := '\033[0;32m' # Green
-BLU := '\033[0;34m' # Blue
-PRP := '\033[0;35m' # Purple
-BRN := '\033[0;33m' # Brown
-CYN := '\033[0;36m' # Cyan
+J_CARGO_NO_WARN := '-Awarnings'
+J_RUST_LOG:= 'debug'
+J_RUST_BACKTRACE:= '1'
+J_RUSTFLAGS:='--cfg tokio_unstable'
+J_CARGO_TOML_VERSION:=`rg '^version = ".*"' Cargo.toml | sd '.*"(.*)".*' '$1'`
+# just path vars
+J_HOME_DIR := env_var('HOME')
+J_LOCAL_ROOT := justfile_directory()
+J_INVOCD_FROM := invocation_directory()
+J_INVOC_IS_ROOT := if J_INVOCD_FROM == J_LOCAL_ROOT { "true" } else { "false" }
+# custom vars
+J_FROZE_SHA_REGEX := 'FROZE_[a-fA-F0-9]{64}_FROZE-'
+J_VAR_OR_ENV_REGEX := '[A-Z][A-Z_0-9]{3}+'
+# ANSI Color Codes for use with echo command
 NC := '\033[0m'     # No Color
+CYN := '\033[0;36m' # Cyan
+BLU := '\033[0;34m' # Blue
+GRN := '\033[0;32m' # Green
+PRP := '\033[0;35m' # Purple
+RED := '\033[0;31m' # Red
+YLW := '\033[0;33m' # Yellow
+BRN := '\033[0;33m' # Brown
 
 # Default, lists commands.
 _default:
         @just --list --unsorted
 
 # Initialize repository.
-init: && deps-ext gen-env
-    cargo build    
-    cargo doc
+[confirm(
+'This will:
+(1) perform standard cargo commands
+    (e.g. clean, build)
+(2) generate some files if not present
+    (e.g. git pre-commit hook, .env)
+
+Commands can be inspected in the currently invoked `justfile`.
+
+-- Confirm initialization?'
+)]
+[group('init')]
+init: && list-external-deps _gen-env _gen-git-hooks
+    cargo clean
+    cargo build
+    cargo doc --all-features --document-private-items
+
+# Linting, formatting, typo checking, etc.
+check:
+    cargo verify-project
+    cargo check --workspace --all-targets --all-features
+    cargo clippy --workspace --all-targets --all-features
+    cargo test --workspace --all-features --no-run
+    cargo fmt
+    typos
+    committed
+
+# Show docs.
+docs:
+    rustup doc
+    rustup doc --std
+    cargo doc --all-features --document-private-items --open
+
+# Add a package to workspace // adds and removes a bin to update workspace package register
+packadd name:
+    cargo new --bin {{name}}
+    rm -rf {{name}}
+    cargo generate --path ./.support/cargo_generate_templates/_template__new_package --name {{name}}
+
+
+# All tests, little feedback unless issues are detected.
+[group('test')]
+test:
+    cargo test --workspace --all-features --doc
+    cargo nextest run --cargo-quiet --cargo-quiet --no-fail-fast
+
+# Runtests for a specific package.
+[group('test')]
+testp package="":
+    cargo test --doc --quiet --package {{package}}
+    cargo nextest run --cargo-quiet --cargo-quiet --package {{package}} --no-fail-fast
+
+# Run a specific test with output visible. (Use '' for test_name to see all tests and set log_level)
+[group('test')]
+test-view test_name="" log_level="error":
+    @echo "'Fun' Fact; the '--test' flag only allows integration test selection and will just fail on unit tests."
+    RUST_LOG={{log_level}} cargo test {{test_name}} -- --nocapture
+
+# Run a specific test with NEXTEST with output visible. (Use '' for test_name to see all tests and set log_level)
+[group('test')]
+testnx-view test_name="" log_level="error":
+    @echo "'Fun' Fact; the '--test' flag only allows integration test selection and will just fail on unit tests."
+    RUST_LOG={{log_level}} cargo nextest run {{test_name}} --no-capture --no-fail-fast
+
+# All tests, little feedback unless issues are detected.
+[group('test')]
+test-whisper:
+    cargo test --doc --quiet
+    cargo nextest run --cargo-quiet --cargo-quiet --status-level=leak
+
+# Run performance analysis on a package.
+[group('perf')]
+perf package *args:
+    cargo build --profile profiling --bin {{package}};
+    hyperfine --export-markdown=.output/profiling/{{package}}_hyperfine_profile.md './target/profiling/{{package}} {{args}}' --warmup=3 --shell=none;
+    samply record --output=.output/profiling/{{package}}_samply_profile.json --iteration-count=3 ./target/profiling/{{package}} {{args}};
+
+# Possible future perf compare command.
+[group('perf')]
+perf-compare-info:
+    @echo "Use hyperfine directly:\n{{GRN}}hyperfine{{NC}} {{BRN}}'cmd args'{{NC}} {{BRN}}'cmd2 args'{{NC}} {{PRP}}...{{NC}} --warmup=3 --shell=none"
+
+
+# List dependencies. (This command has dependencies.)
+[group('meta')]
+list-external-deps:
+    @echo "{{CYN}}List of external dependencies for this command runner and repo:"
+    xsv table ad_deps.csv
+
+# Info about Rust-Compiler, Rust-Analyzer, Cargo-Clippy, and Rust-Updater.
+[group('meta')]
+rust-meta-info:
+    rustc --version
+    rust-analyzer --version
+    cargo-clippy --version
+    rustup --version
+
+# ######################################################################## #
 
 # Clean, release build, deploy file to `/user/local/bin/`
 [confirm]
+[group('deploy')]
 deploy-local: check
     cargo clean
     cargo build --release
@@ -41,10 +139,11 @@ deploy-local: check
 
 # push version x.y.z; deploy if used with `dist`
 [confirm]
+[group('deploy')]
 deploy-remote version: check
-    @ echo "TOML_VERSION: {{TOML_VERSION}}"
+    @ echo "TOML_VERSION: {{J_CARGO_TOML_VERSION}}"
     @ echo "input version: {{version}}"
-    echo {{ if TOML_VERSION == version  {"TOML version declaration matches input version."} else  {`error("version_mismatch")`} }}
+    echo {{ if J_CARGO_TOML_VERSION == version  {"TOML version declaration matches input version."} else  {`error("version_mismatch")`} }}
     cargo clean
     cargo build --release
     cargo doc --release
@@ -54,25 +153,8 @@ deploy-remote version: check
     - git push
     git push --tags
 
-# Linting, formatting, typo checking, etc.
-check:
-    cargo clippy
-    cargo fmt
-    typos
-    committed
-    cargo nextest run --status-level=leak
-
-# Run a specific test with output visible. (Use '' for test_name to see all tests and set log_level)
-test-view test_name="" log_level="error":
-    @echo "'Fun' Fact; the '--test' flag only allows integration test selection and will just fail on unit tests."
-    RUST_LOG={{log_level}} cargo test {{test_name}} -- --nocapture 
-    
-# Run a specific test with NEXTEST with output visible. (Use '' for test_name to see all tests and set log_level)
-testnx-view test_name="" log_level="error":
-    @echo "'Fun' Fact; the '--test' flag only allows integration test selection and will just fail on unit tests."
-    RUST_LOG={{log_level}} cargo nextest run {{test_name}} --no-capture 
-
 # Ad hoc hyperfine tests for the release version of the cli app.
+[group('perf')]
 bench-hyperf regex='ho' :
     @echo "{{GRN}}Release{{NC}}, search-only:"
     hyperfine --warmup 3 "target/release/rename_files '{{regex}}' --recurse"
@@ -80,42 +162,56 @@ bench-hyperf regex='ho' :
     hyperfine --warmup 3 "target/release/rename_files '{{regex}}' --rep 'ohhoho' --recurse --test-run"
     @echo "{{PRP}}Comparison{{NC}}: fd --unrestricted, search-only:"
     hyperfine --warmup 3 "fd --unrestricted '{{regex}}'"
-    
-# Auto-fix errors picked up by check. (Manual exclusion of data folder as additional safeguard.)
-[confirm]
-fix:
-     typos --exclude 'data/*' --write-changes
-
-# Clean up cargo build artifacts.
-[confirm]
-teardown:
-    cargo clean
-
-# Watch a file: compile & run on changes.
-watch file_to_run:
-    cargo watch --quiet --clear --exec 'run --quiet --example {{file_to_run}}'
-
-# List dependencies. (This command has dependencies.)
-deps-ext:
-    @echo "{{CYN}}List of external dependencies for this command runner and repo:"
-    xsv table ext_dependencies.csv
-
-# Generate .env file from template, if .env file not present.
-gen-env:
-    if [ -f '.env' ]; then echo '`.env` exists, exiting...' && exit 1; fi
-    cp template.env .env
-    cp -n template.env .env
-    @ echo "{{BLU}}.env{{NC}} created from template. {{GRN}}Please fill in the necessary values.{{NC}}"
-    @ echo "e.g. 'nvim .env'"
 
 # ######################################################################## #
 
-# add `gen-env` to `init`
-# # Generate a `.env` file from `template.env`.
-# gen-env:
-#     @echo "{{CYN}}The {{GRN}}.env DATABASE_URL value{{CYN}}will populate your database path when needed.  Please edit the file to manually specify."
-#     @echo {{ if path_exists(".env") == "true" { `echo "\(.env file already exists\)"` } else { `cp 'template.env' '.env'; echo "\(.env file created\)"`} }}
+# Access to any cargo-xtask commands. Listed for discoverability.
+[group('xtask')]
+_x *args:
+    -cargo xtask {{args}}
 
+# ######################################################################## #
+
+# Print reminder: how to set env vars that propagate to child shells.
+_remind-setenv:
+    @ echo '{{GRN}}set -a{{NC}}; {{GRN}}source {{BLU}}.env{{NC}}; {{GRN}}set +a{{NC}}'
+
+# ######################################################################## #
+
+# Generate .env file from template, if .env file not present.
+_gen-env:
+    @ if [ -f '.env' ]; \
+        then \
+        echo '`{{BRN}}.env{{NC}}` exists, {{PRP}}skipping creation{{NC}}...' && exit 0; \
+        else \
+        cp -n .support/_template.env .env; \
+        echo "{{BLU}}.env{{NC}} created from template with {{GRN}}example{{NC}} values."; \
+        fi
+
+# Attempt to add all git-hooks. (no overwrite)
+_gen-git-hooks: _gen-precommit-hook _gen-commitmsg-hook
+
+# Attempt to add `pre-commit` git-hook. (no overwrite)
+_gen-precommit-hook:
+    @ if [ -f '.git/hooks/pre-commit' ]; \
+        then \
+        echo '`.git/hooks/{{BRN}}pre-commit{{NC}}` exists, {{PRP}}skipping creation{{NC}}...' && exit 0; \
+        else \
+        cp -n .support/git_hooks/pre-commit .git/hooks/pre-commit; \
+        chmod u+x .git/hooks/pre-commit; \
+        echo live "{{BLU}}pre-commit{{NC}} hook added to {{GRN}}.git/hooks{{NC}} and set as executable"; \
+        fi
+
+# Attempt to add `commit-msg` git-hook. (no overwrite)
+_gen-commitmsg-hook:
+    @ if [ -f '.git/hooks/commit-msg' ]; \
+        then \
+        echo '`.git/hooks/{{BRN}}commit-msg{{NC}}` exists, {{PRP}}skipping creation{{NC}}...' && exit 0; \
+        else \
+        cp -n .support/git_hooks/commit-msg .git/hooks/commit-msg; \
+        chmod u+x .git/hooks/commit-msg; \
+        echo live "{{BLU}}commit-msg{{NC}} hook added to {{GRN}}.git/hooks{{NC}} and set as executable"; \
+        fi
 
 # ######################################################################## #
 
@@ -125,12 +221,11 @@ _freeze file:
 
 # Unfreeze a file. (removes 'FROZE...FROZE-' tag from filename)
 _thaw file:
-	echo {{file}} | sd '{{FROZE_SHA_REGEX}}' '' | xargs mv -iv {{file}}
+	echo {{file}} | sd '{{J_FROZE_SHA_REGEX}}' '' | xargs mv -iv {{file}}
 
-# Find local file(s) through the ice.
-_arctic_recon iceless_name:
-	fd --max-depth 1 '{{FROZE_SHA_REGEX}}{{iceless_name}}' | rg {{iceless_name}}
-
+# Search local files through ice.
+_arctic-recon iceless_name:
+	fd --max-depth 1 '{{J_FROZE_SHA_REGEX}}{{iceless_name}}' | rg {{iceless_name}}
 
 # ######################################################################## #
 
@@ -143,5 +238,7 @@ _sha file:
 	echo {{sha256_file(file)}}
 
 # Example function for syntax reference
-_example_file_exists_test file:
+_example-file-exists-test file:
     echo {{ if path_exists(file) == "true" { "hello" } else { "goodbye" } }}
+
+# ######################################################################## #

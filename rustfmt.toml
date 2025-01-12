@@ -1,43 +1,38 @@
 # rustfmt.toml
-## web description of options: https://rust-lang.github.io/rustfmt/?version=v1.6.0&search=
+## web description of options:
+## https://rust-lang.github.io/rustfmt/?version=master&search=
 
 # required_version   # specify rustfmt version requirement
 # ignore = []        # files for rustfmt to ignore
-version = "Two"
+
+## meta-config
+style_edition = "2024"
 unstable_features = true
 
-tab_spaces = 8 # legible groups! :)
-# hard_tabs = true
-
-## line lengths
+## general spacing
 max_width = 120
-use_small_heuristics = "Max" # formatting based on sub-max_width lengths
-
-## braces start at end of a line
-brace_style = "SameLineWhere"          # same line except after Where
-control_brace_style = "AlwaysSameLine"
-
-## sub element alignment with parent open delimiter
-imports_indent = "Visual"
-indent_style = "Visual"
+tab_spaces = 8                       # legible groups! :)
+array_width = 120                    # arrays
+attr_fn_like_width = 120             # attributes
+fn_call_width = 120                  # function calls
+struct_lit_width = 120               # raw struct instantiation
+struct_variant_width = 120           # enum struct variant instantiation
+single_line_if_else_max_width = 120  # ¡doesn't always work!
+single_line_let_else_max_width = 120 # ¡doesn't always work!
+# fn_single_line = true              # creates false "unnecessary braces" lint
 
 ## import organization
 imports_granularity = "Crate"      # group all imports for a crate together
 group_imports = "StdExternalCrate" # category style grouping of imports (ala isort in python)
+imports_indent = "Visual"
 
-## ~function related
-reorder_impl_items = true               # assoc_type & const at top of impl
-where_single_line = true                # where on single line if few types
-type_punctuation_density = "Compressed" # no spaces around (e.g.) TypeA+TypeB
-
-## struct related
-struct_field_align_threshold = 20 # move distance to seek type alignment in struct fields
+## struct/enum related
+struct_field_align_threshold = 40 # move distance to seek type alignment in struct fields
+enum_discrim_align_threshold = 40 # move distance to seek type alignment in enum discriminants
 use_field_init_shorthand = true   # let _ = some_struct {x, y, z}
 
-## various
-inline_attribute_width = 50    # distance to allow attributes on same lines a what they tag
-overflow_delimited_expr = true # no double nesting for vertical formatted lists, etc.
+## impl organization
+reorder_impl_items = true # assoc_type & const at top of impl
 
-# ## questionable
-# chain_width = 0        # default: 60
-# format_strings = true  # auto line-break strings (easier to read, more annoying to edit)
+## macros
+format_macro_bodies = false

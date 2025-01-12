@@ -1,3 +1,6 @@
+# Settings for committed tool
+# [Committed Configuration Reference](https://github.com/crate-ci/committed/blob/master/docs/reference.md)
+
 subject_length = 50
 subject_capitalized = false
 subject_not_punctuated = true
@@ -16,5 +19,6 @@ allowed_types = [
     "refactor",
     "perf",
     "test",
+    "discovery",
 ]
 merge_commit = true
