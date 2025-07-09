@@ -13,4 +13,4 @@
 egui = "egui"
 
 [files]
-extend-exclude = ["**/data/**", ".output/**", "*.log", "*.csv"]
+extend-exclude = ["**/data/**", ".output/**", "*.log", "*.csv", "dev_log/agent_conversation/*"]
