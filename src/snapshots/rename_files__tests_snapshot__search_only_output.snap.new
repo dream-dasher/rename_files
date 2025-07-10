@@ -1,0 +1,6 @@
+---
+source: src/lib.rs
+assertion_line: 691
+expression: output
+---
+Operation completed successfully

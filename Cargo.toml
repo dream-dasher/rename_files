@@ -30,6 +30,7 @@ walkdir = "2"
 [dev-dependencies]
 test-log = { version = "0.2", features = ["trace"] }
 tempfile = "3"
+# insta = "1"
 # quickcheck = "1"
 # quickcheck_macros = "1"
 

@@ -166,12 +166,11 @@ fn walkdir_build_with_depths(does_recurse: bool) -> WalkDir {
 /// /////////////                 TESTS - lib.rs                             ////////////// //
 /// /////////////////////////////////////////////////////////////////////////////////////// //
 #[cfg(test)]
-pub mod tests {
+pub mod test_pub_utilities {
         use std::{fs::{self, File},
                   sync::{Mutex, OnceLock}};
 
         use tempfile::TempDir;
-        use test_log::test;
 
         use super::*;
 
@@ -192,7 +191,7 @@ pub mod tests {
         /// or using `cargo nextest`, which process separate tests).  The intrinsic global (mutable)
         /// resource character of the working directory should be called out (and ideally dealt with)
         ///  in the region of the code that has to work with it.
-        fn utility_with_global_mutex<F, R>(f: F) -> R
+        pub fn utility_with_global_mutex<F, R>(f: F) -> R
         where
                 F: FnOnce() -> R,
         {
@@ -231,7 +230,7 @@ pub mod tests {
         ///   - root/dir_2/dir_21/
         ///   - root/dir_2/dir_21/dir_211/
         /// ```
-        fn utility_test_dir_gen() -> Result<TempDir> {
+        pub fn utility_test_dir_gen() -> Result<TempDir> {
                 let dir_root = TempDir::new()?;
                 File::create(dir_root.path().join("file_0a.txt"))?;
                 File::create(dir_root.path().join("file_0b.txt"))?;
@@ -256,6 +255,28 @@ pub mod tests {
 
                 Ok(dir_root)
         }
+
+        /// Utility function to collect directory state for comparison
+        pub fn utility_collect_directory_state(path: &str) -> Result<Vec<std::path::PathBuf>> {
+                let mut entries = Vec::new();
+                for entry in WalkDir::new(path).contents_first(true) {
+                        entries.push(entry?.path().to_path_buf());
+                }
+                Ok(entries)
+        }
+}
+
+#[cfg(test)]
+pub mod tests_manual {
+
+        use test_log::test;
+
+        use super::*;
+        use crate::test_pub_utilities::{utility_collect_directory_state, utility_test_dir_gen,
+                                        utility_with_global_mutex};
+
+        pub type Result<T> = core::result::Result<T, Error>;
+        pub type Error = Box<dyn std::error::Error>;
 
         // Test the app() function
         // Test the core_process_loop() function
@@ -463,17 +484,6 @@ pub mod tests {
                 })
         }
 
-        /// Utility function to capture directory state for comparison
-        /// Returns a sorted vector of relative paths from the current directory
-        /// Helper function to collect directory state for comparison
-        fn utility_collect_directory_state(path: &str) -> Result<Vec<std::path::PathBuf>> {
-                let mut entries = Vec::new();
-                for entry in WalkDir::new(path).contents_first(true) {
-                        entries.push(entry?.path().to_path_buf());
-                }
-                Ok(entries)
-        }
-
         /// Files are only renamed if preview=false AND replacement=Some AND regex has a match. (i.e. if any of true, None, or no-match occurs then no changes should occur)
         /// We take a a base set of args, validate that they would cause a change, and then apply each
         /// case that should be change blocking, alone, to that base set and verify that no change occurred.
@@ -610,3 +620,103 @@ pub mod tests {
                 })
         }
 }
+
+// #[cfg(test)]
+// pub mod tests_snapshot {
+//         use insta::assert_snapshot;
+//         use test_log::test;
+//
+//         use super::*;
+//         use crate::test_pub_utilities::{utility_test_dir_gen, utility_with_global_mutex};
+//
+//         pub type Result<T> = core::result::Result<T, Error>;
+//         pub type Error = Box<dyn std::error::Error>;
+//
+//         /// Utility function to test app behavior and capture error messages for snapshot testing
+//         /// Note: This doesn't capture stdout (println! output) - for that we'd need to run the actual binary
+//         fn utility_capture_app_result(args: &Args) -> Result<String> {
+//                 let temp_dir = utility_test_dir_gen()?;
+//                 std::env::set_current_dir(&temp_dir.path())?;
+//
+//                 // Run the app and capture success/error result
+//                 let result = app(args);
+//
+//                 match result {
+//                         Ok(()) => Ok("Success: Operation completed".to_string()),
+//                         Err(e) => Ok(format!("Error: {}", e)),
+//                 }
+//         }
+//
+//         /// Test CLI output snapshots for preview mode
+//         #[test]
+//         fn test_snap_preview_mode() -> Result<()> {
+//                 utility_with_global_mutex(|| {
+//                         let args = Args {
+//                                 regex:       "(file_.*)".to_string(),
+//                                 replacement: Some("changed-${1}".to_string()),
+//                                 recurse:     false,
+//                                 preview:     true,
+//                         };
+//
+//                         let output = utility_capture_app_result(&args)?;
+//                         assert_snapshot!("preview_mode_output", output);
+//                         Ok(())
+//                 })
+//         }
+//
+//         /// Test CLI output snapshots for search-only mode
+//         #[test]
+//         fn test_snap_search_only() -> Result<()> {
+//                 utility_with_global_mutex(|| {
+//                         let args = Args {
+//                                 regex:       "(file_.*)".to_string(),
+//                                 replacement: None,
+//                                 recurse:     false,
+//                                 preview:     false,
+//                         };
+//
+//                         let output = utility_capture_app_result(&args)?;
+//                         assert_snapshot!("search_only_output", output);
+//                         Ok(())
+//                 })
+//         }
+//
+//         /// Test CLI output snapshots for invalid regex
+//         #[test]
+//         fn test_snap_invalid_regex() -> Result<()> {
+//                 utility_with_global_mutex(|| {
+//                         let args = Args {
+//                                 regex:       "[invalid_regex".to_string(),
+//                                 replacement: Some("replacement".to_string()),
+//                                 recurse:     false,
+//                                 preview:     false,
+//                         };
+//
+//                         let output = utility_capture_app_result(&args)?;
+//                         assert_snapshot!("invalid_regex_output", output);
+//                         Ok(())
+//                 })
+//         }
+//
+//         /// Test CLI output snapshots for no matches
+//         #[test]
+//         fn test_snap_no_matches() -> Result<()> {
+//                 utility_with_global_mutex(|| {
+//                         let args = Args {
+//                                 regex:       "no_match_pattern_xyz".to_string(),
+//                                 replacement: Some("replacement".to_string()),
+//                                 recurse:     false,
+//                                 preview:     false,
+//                         };
+//
+//                         let output = utility_capture_app_result(&args)?;
+//                         assert_snapshot!("no_matches_output", output);
+//                         Ok(())
+//                 })
+//         }
+// }
+
+// #[cfg(test)]
+// pub mod tests_random_sample {
+//     // QuickCheck tests will go here in Stage 3
+// }
