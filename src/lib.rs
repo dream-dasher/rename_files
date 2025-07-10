@@ -479,7 +479,7 @@ pub mod tests {
                                 preview:     false,
                         };
 
-                        // Test 1: Verify base configuration DOES cause changes (positive test)
+                        // Test 0: Verify base configuration DOES cause changes (positive test)
                         {
                                 let temp_dir = utility_test_dir_gen()?;
                                 std::env::set_current_dir(&temp_dir.path())?;
@@ -501,8 +501,8 @@ pub mod tests {
                                 temp_dir.close()?;
                         }
 
-                        // Test 2: Verify safety variants DON'T cause changes (negative tests)
-                        let safety_test_cases = [
+                        // Test 1+: Verify safety variants DON'T cause changes (negative tests)
+                        let nochange_test_cases = [
                                 ("preview_true", Args { preview: true, ..base_args.clone() }),
                                 ("replacement_none", Args { replacement: None, ..base_args.clone() }),
                                 (
@@ -515,7 +515,7 @@ pub mod tests {
                                 ),
                         ];
 
-                        for (test_name, args) in safety_test_cases {
+                        for (test_name, args) in nochange_test_cases {
                                 let temp_dir = utility_test_dir_gen()?;
                                 std::env::set_current_dir(&temp_dir.path())?;
 
@@ -528,11 +528,11 @@ pub mod tests {
 
                                 if directory_before_state != directory_after_state {
                                         tracing::error!(
-                                                "SAFETY TEST FAILED: {} should not have caused changes but did",
+                                                "NO-CHANGE TEST FAILED: \"{}\" should not have changed directory state, but did",
                                                 test_name
                                         );
                                         return Err(format!(
-                                                "Safety test {} should not cause changes but did",
+                                                "No-Change test \"{}\" should have resulted in changed directory state, but did",
                                                 test_name
                                         )
                                         .into());
