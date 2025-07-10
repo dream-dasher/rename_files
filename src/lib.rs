@@ -167,8 +167,10 @@ fn walkdir_build_with_depths(does_recurse: bool) -> WalkDir {
 /// /////////////////////////////////////////////////////////////////////////////////////// //
 #[cfg(test)]
 pub mod test_pub_utilities {
-        use std::{fs::{self, File},
-                  sync::{Mutex, OnceLock}};
+        use std::{
+                fs::{self, File},
+                sync::{Mutex, OnceLock},
+        };
 
         use tempfile::TempDir;
 
@@ -272,8 +274,9 @@ pub mod tests_manual {
         use test_log::test;
 
         use super::*;
-        use crate::test_pub_utilities::{utility_collect_directory_state, utility_test_dir_gen,
-                                        utility_with_global_mutex};
+        use crate::test_pub_utilities::{
+                utility_collect_directory_state, utility_test_dir_gen, utility_with_global_mutex,
+        };
 
         pub type Result<T> = core::result::Result<T, Error>;
         pub type Error = Box<dyn std::error::Error>;
@@ -335,10 +338,10 @@ pub mod tests_manual {
 
                         // run fresh
                         let args = Args {
-                                regex:       "(file_.*)".to_string(),
+                                regex: "(file_.*)".to_string(),
                                 replacement: Some("changed-${1}".to_string()),
-                                recurse:     false,
-                                preview:     false,
+                                recurse: false,
+                                preview: false,
                         };
                         app(&args)?;
                         println!("temp: {:?}", temp_dir);
@@ -349,10 +352,10 @@ pub mod tests_manual {
 
                         // run on changed
                         let args = Args {
-                                regex:       "(file_.*)".to_string(),
+                                regex: "(file_.*)".to_string(),
                                 replacement: Some("changed-${1}".to_string()),
-                                recurse:     false,
-                                preview:     false,
+                                recurse: false,
+                                preview: false,
                         };
                         app(&args)?;
                         println!("temp: {:?}", temp_dir);
@@ -378,10 +381,10 @@ pub mod tests_manual {
 
                         // run fresh
                         let args = Args {
-                                regex:       "(file.*)".to_string(),
+                                regex: "(file.*)".to_string(),
                                 replacement: Some("changed-${1}".to_string()),
-                                recurse:     true,
-                                preview:     false,
+                                recurse: true,
+                                preview: false,
                         };
                         app(&args)?;
                         println!("temp: {:?}", temp_dir);
@@ -409,10 +412,10 @@ pub mod tests_manual {
 
                         // run against dirs
                         let args = Args {
-                                regex:       "(dir.*)".to_string(),
+                                regex: "(dir.*)".to_string(),
                                 replacement: Some("changed-${1}".to_string()),
-                                recurse:     true,
-                                preview:     false,
+                                recurse: true,
+                                preview: false,
                         };
                         app(&args)?;
                         println!("temp: {:?}", temp_dir);
@@ -444,10 +447,10 @@ pub mod tests_manual {
 
                         // run against both
                         let args = Args {
-                                regex:       r"(\d+)".to_string(),
+                                regex: r"(\d+)".to_string(),
                                 replacement: Some("d${1}".to_string()),
-                                recurse:     true,
-                                preview:     false,
+                                recurse: true,
+                                preview: false,
                         };
                         app(&args)?;
                         println!("temp: {:?}", temp_dir);
@@ -493,10 +496,10 @@ pub mod tests_manual {
                 utility_with_global_mutex(|| {
                         // base config that *should* result in changes
                         let base_args = Args {
-                                regex:       "(file_.*)".to_string(),
+                                regex: "(file_.*)".to_string(),
                                 replacement: Some("changed-${1}".to_string()),
-                                recurse:     true,
-                                preview:     false,
+                                recurse: true,
+                                preview: false,
                         };
 
                         // test 0, preamble: verify that base config *does* cause changes to files/dirs
@@ -574,10 +577,10 @@ pub mod tests_manual {
                 utility_with_global_mutex(|| {
                         // base config that *should* result in changes
                         let base_args = Args {
-                                regex:       "(file_.*)".to_string(),
+                                regex: "(file_.*)".to_string(),
                                 replacement: Some("changed-${1}".to_string()),
-                                recurse:     true,
-                                preview:     false,
+                                recurse: true,
+                                preview: false,
                         };
 
                         // test 0, preamble: verify that base config *does* cause changes to files/dirs
