@@ -12,6 +12,9 @@ description = "CLI tool (& lib); regex search files & optionally rename. Recursi
 [lints.rust]
 unsafe_code = { level = "forbid" }
 
+[lints.clippy]
+uninlined_format_args = "allow" # syntax highlighting doesn't currently capture inlined variables "words {var}" vs "words {}, var"
+
 [dependencies]
 # chrono = "0.4"
 clap = { version = "4", features = ["derive", "wrap_help"] }
