@@ -10,9 +10,9 @@ use owo_colors::OwoColorize;
 use regex::Regex;
 use walkdir::WalkDir;
 
-/// Filename Find and (optionally) Replace using Rust Regex Syntax.  
+/// Filename Find and (optionally) Replace using Rust Regex Syntax.
 ///
-/// Files are *only* renamed if a `--rep(lace)` argument is provided AND `-p/--preview` is *not* provided.  
+/// Files are *only* renamed if a `--rep(lace)` argument is provided AND `-p/--preview` is *not* provided.
 #[derive(Parser, Debug)]
 #[cfg_attr(test, derive(Clone))] // TODO: Remove Clone when CLI and lib structs are separated
 #[command(version, about, long_about)]
@@ -182,7 +182,7 @@ pub mod tests {
         ///
         /// # Local Usecase:
         /// The 'working directory' is a global state within a process.  (This is an issue
-        /// baked into the design of all the major OSes.)  
+        /// baked into the design of all the major OSes.)
         /// This means that working directory manipulation and reading within tests is *not* thread-safe.
         /// This function allows us to force in-process serialization of working directory access.
         ///
@@ -461,7 +461,7 @@ pub mod tests {
                 Ok(entries)
         }
 
-        /// Files are only renamed if preview=false AND replacement=Some AND regex has a match. (i.e. if any of true, None, or no-match occures then no changes should occur)
+        /// Files are only renamed if preview=false AND replacement=Some AND regex has a match. (i.e. if any of true, None, or no-match occurs then no changes should occur)
         /// We take a a base set of args, validate that they would cause a change, and then apply each
         /// case that should be change blocking, alone, to that base set and verify that no change occurred.
         ///
