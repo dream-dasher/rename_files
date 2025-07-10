@@ -16,23 +16,19 @@ unsafe_code = { level = "forbid" }
 uninlined_format_args = "allow" # syntax highlighting doesn't currently capture inlined variables "words {var}" vs "words {}, var"
 
 [dependencies]
-# chrono = "0.4"
-clap = { version = "4", features = ["derive", "wrap_help"] }
-# derive_more = "0.99"
-# indicatif = "0.17"
-# itertools = "0.13"
+clap = { version = "4", features = ["derive", "wrap_help"] } # "derive", "env", "string", "unicode", "wrap_help",
 owo-colors = "4"
-regex = { version = "1", features = ["logging"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["chrono", "env-filter"] }
+regex = { version = "1", features = ["logging"] } # "logging"
+tracing = { version = "0.1", features = [] } # "release_max_level_warn"^"release_max_level_off"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] } # "env-filter","json"
 walkdir = "2"
 
 [dev-dependencies]
-test-log = { version = "0.2", features = ["trace"] }
 tempfile = "3"
-# insta = "1"
+test-log = { version = "0.2", features = ["trace"] } # "trace"
 # quickcheck = "1"
 # quickcheck_macros = "1"
+# insta = { version = "1", features = [] } # "clap","csv","json","redactions","serde","toml","walkdir",
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
