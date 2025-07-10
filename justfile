@@ -41,13 +41,13 @@ Commands can be inspected in the currently invoked `justfile`.
 -- Confirm initialization?'
 )]
 [group('init')]
-init: && list-external-deps _gen-env _gen-git-hooks
+init: && list-external-deps _gen-env _gen-git-hooks _date
     cargo clean
-    cargo build
+    cargo build --workspace
     cargo doc --all-features --document-private-items
 
 # Linting, formatting, typo checking, etc.
-check:
+check: && _date
     cargo verify-project
     cargo check --workspace --all-targets --all-features
     cargo clippy --workspace --all-targets --all-features
@@ -55,15 +55,16 @@ check:
     cargo fmt
     typos
     committed
+    cargo machete
 
 # Show docs.
-docs:
+docs: && _date
     rustup doc
     rustup doc --std
     cargo doc --all-features --document-private-items --open
 
 # Add a package to workspace // adds and removes a bin to update workspace package register
-packadd name:
+packadd name: && _date
     cargo new --bin {{name}}
     rm -rf {{name}}
     cargo generate --path ./.support/cargo_generate_templates/_template__new_package --name {{name}}
@@ -71,56 +72,61 @@ packadd name:
 
 # All tests, little feedback unless issues are detected.
 [group('test')]
-test:
+test: && _date
     cargo test --workspace --all-features --doc
-    cargo nextest run --cargo-quiet --cargo-quiet --no-fail-fast
+    cargo nextest run --workspace --all-features --all-targets --no-fail-fast
+
+# Run doc tests only.
+[group('test')]
+test-docs: && _date
+    cargo test --workspace --all-features --doc
 
 # Runtests for a specific package.
 [group('test')]
-testp package="":
+testp package="": && _date
     cargo test --doc --quiet --package {{package}}
-    cargo nextest run --cargo-quiet --cargo-quiet --package {{package}} --no-fail-fast
+    cargo nextest run --all-features --all-targets --no-fail-fast --package {{package}}
 
 # Run a specific test with output visible. (Use '' for test_name to see all tests and set log_level)
 [group('test')]
-test-view test_name="" log_level="error":
+test-view test_name="" log_level="error": && _date
     @echo "'Fun' Fact; the '--test' flag only allows integration test selection and will just fail on unit tests."
     RUST_LOG={{log_level}} cargo test {{test_name}} -- --nocapture
 
 # Run a specific test with NEXTEST with output visible. (Use '' for test_name to see all tests and set log_level)
 [group('test')]
-testnx-view test_name="" log_level="error":
+testnx-view test_name="" log_level="error": && _date
     @echo "'Fun' Fact; the '--test' flag only allows integration test selection and will just fail on unit tests."
-    RUST_LOG={{log_level}} cargo nextest run {{test_name}} --no-capture --no-fail-fast
+    RUST_LOG={{log_level}} cargo nextest run {{test_name}} --no-capture --no-fail-fast --all-features --all-targets
 
 # All tests, little feedback unless issues are detected.
 [group('test')]
 test-whisper:
     cargo test --doc --quiet
-    cargo nextest run --cargo-quiet --cargo-quiet --status-level=leak
+    cargo nextest run --cargo-quiet --cargo-quiet --workspace --all-features --all-targets --status-level=leak
 
 # Run performance analysis on a package.
 [group('perf')]
-perf package *args:
+perf package *args: && _date
     cargo build --profile profiling --bin {{package}};
     hyperfine --export-markdown=.output/profiling/{{package}}_hyperfine_profile.md './target/profiling/{{package}} {{args}}' --warmup=3 --shell=none;
     samply record --output=.output/profiling/{{package}}_samply_profile.json --iteration-count=3 ./target/profiling/{{package}} {{args}};
 
 # Possible future perf compare command.
 [group('perf')]
-perf-compare-info:
+perf-compare-info: && _date
     @echo "Use hyperfine directly:\n{{GRN}}hyperfine{{NC}} {{BRN}}'cmd args'{{NC}} {{BRN}}'cmd2 args'{{NC}} {{PRP}}...{{NC}} --warmup=3 --shell=none"
 
 
 # List dependencies. (This command has dependencies.)
 [group('meta')]
-list-external-deps:
+list-external-deps: && _date
     @echo "{{CYN}}List of external dependencies for this command runner and repo:"
     xsv table ad_deps.csv
 
 # Info about Rust-Compiler, Rust-Analyzer, Cargo-Clippy, and Rust-Updater.
 [group('meta')]
-rust-meta-info:
+rust-meta-info: && _date
     rustc --version
     rust-analyzer --version
     cargo-clippy --version
@@ -131,7 +137,7 @@ rust-meta-info:
 # Clean, release build, deploy file to `/user/local/bin/`
 [confirm]
 [group('deploy')]
-deploy-local: check
+deploy-local: check && _date
     cargo clean
     cargo build --release
     cargo doc --release
@@ -140,10 +146,10 @@ deploy-local: check
 # push version x.y.z; deploy if used with `dist`
 [confirm]
 [group('deploy')]
-deploy-remote version: check
+deploy-remote version: check && _date
     @ echo "TOML_VERSION: {{J_CARGO_TOML_VERSION}}"
     @ echo "input version: {{version}}"
-    echo {{ if J_CARGO_TOML_VERSION == version  {"TOML version declaration matches input version."} else  {`error("version_mismatch")`} }}
+    echo {{ if J_CARGO_TOML_VERSION == version  {"TOML version declaration matches input version."} else {`error("version_mismatch")`} }}
     cargo clean
     cargo build --release
     cargo doc --release
@@ -155,7 +161,7 @@ deploy-remote version: check
 
 # Ad hoc hyperfine tests for the release version of the cli app.
 [group('perf')]
-bench-hyperf regex='ho' :
+bench-hyperf regex='ho': && _date
     @echo "{{GRN}}Release{{NC}}, search-only:"
     hyperfine --warmup 3 "target/release/rename_files '{{regex}}' --recurse"
     @echo "{{GRN}}Release{{NC}}, search & replace, no file write:"
@@ -165,10 +171,10 @@ bench-hyperf regex='ho' :
 
 # ######################################################################## #
 
-# Access to any cargo-xtask commands. Listed for discoverability.
-[group('xtask')]
-_x *args:
-    -cargo xtask {{args}}
+# # Access to any cargo-xtask commands. Listed for discoverability.
+# [group('xtask')]
+# _x *args:
+#     -cargo xtask {{args}}
 
 # ######################################################################## #
 
@@ -177,6 +183,12 @@ _remind-setenv:
     @ echo '{{GRN}}set -a{{NC}}; {{GRN}}source {{BLU}}.env{{NC}}; {{GRN}}set +a{{NC}}'
 
 # ######################################################################## #
+
+# print date and time
+_date:
+    date
+
+# # ######################################################################## #
 
 # Generate .env file from template, if .env file not present.
 _gen-env:
