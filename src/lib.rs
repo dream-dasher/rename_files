@@ -14,6 +14,7 @@ use walkdir::WalkDir;
 ///
 /// Files are *only* renamed if a `--rep(lace)` argument is provided AND `-p/--preview` is *not* provided.  
 #[derive(Parser, Debug)]
+#[cfg_attr(test, derive(Clone))] // TODO: Remove Clone when CLI and lib structs are separated
 #[command(version, about, long_about)]
 pub struct Args {
         /// (Rust flavor) regex to search filenames with.
@@ -445,6 +446,151 @@ pub mod tests {
                                 .join("changed-dir_d111")
                                 .join("changed-file_d111a.txt")
                                 .exists());
+                        Ok(())
+                })
+        }
+
+        /// Utility function to capture directory state for comparison
+        /// Returns a sorted vector of relative paths from the current directory
+        /// Helper function to collect directory state for comparison
+        fn utility_collect_directory_state(path: &str) -> Result<Vec<std::path::PathBuf>> {
+                let mut entries = Vec::new();
+                for entry in WalkDir::new(path).contents_first(true) {
+                        entries.push(entry?.path().to_path_buf());
+                }
+                Ok(entries)
+        }
+
+        /// Files are only renamed if preview=false AND replacement=Some AND regex has a match. (i.e. if any of true, None, or no-match occures then no changes should occur)
+        /// We take a a base set of args, validate that they would cause a change, and then apply each
+        /// case that should be change blocking, alone, to that base set and verify that no change occurred.
+        ///
+        /// # Warning:
+        /// This test manipulates the working directory manipulation (which is a process-wide global state).
+        /// Code execution is controlled by a global mutex to make this function thread-safe.
+        #[test]
+        fn test_no_change_if_preview_or_norep_or_nomatch() -> Result<()> {
+                utility_with_global_mutex(|| {
+                        // Define base configuration that SHOULD cause changes
+                        let base_args = Args {
+                                regex:       "(file_.*)".to_string(),
+                                replacement: Some("changed-${1}".to_string()),
+                                recurse:     true,
+                                preview:     false,
+                        };
+
+                        // Test 1: Verify base configuration DOES cause changes (positive test)
+                        {
+                                let temp_dir = utility_test_dir_gen()?;
+                                std::env::set_current_dir(&temp_dir.path())?;
+
+                                let mut directory_before_state = utility_collect_directory_state(".")?;
+                                app(&base_args)?;
+                                let mut directory_after_state = utility_collect_directory_state(".")?;
+
+                                directory_before_state.sort();
+                                directory_after_state.sort();
+
+                                if directory_before_state == directory_after_state {
+                                        tracing::error!(
+                                                "POSITIVE TEST FAILED: base_args should have caused changes but didn't"
+                                        );
+                                        return Err("Base args should cause changes but didn't".into());
+                                }
+
+                                temp_dir.close()?;
+                        }
+
+                        // Test 2: Verify safety variants DON'T cause changes (negative tests)
+                        let safety_test_cases = [
+                                ("preview_true", Args { preview: true, ..base_args.clone() }),
+                                ("replacement_none", Args { replacement: None, ..base_args.clone() }),
+                                (
+                                        "no_matches",
+                                        Args {
+                                                regex: "no_match_pattern_xyz".to_string(),
+                                                replacement: Some("should_not_be_used".to_string()),
+                                                ..base_args.clone()
+                                        },
+                                ),
+                        ];
+
+                        for (test_name, args) in safety_test_cases {
+                                let temp_dir = utility_test_dir_gen()?;
+                                std::env::set_current_dir(&temp_dir.path())?;
+
+                                let mut directory_before_state = utility_collect_directory_state(".")?;
+                                app(&args)?;
+                                let mut directory_after_state = utility_collect_directory_state(".")?;
+
+                                directory_before_state.sort();
+                                directory_after_state.sort();
+
+                                if directory_before_state != directory_after_state {
+                                        tracing::error!(
+                                                "SAFETY TEST FAILED: {} should not have caused changes but did",
+                                                test_name
+                                        );
+                                        return Err(format!(
+                                                "Safety test {} should not cause changes but did",
+                                                test_name
+                                        )
+                                        .into());
+                                }
+
+                                temp_dir.close()?;
+                        }
+
+                        Ok(())
+                })
+        }
+
+        /// Test invariant: invalid regex should fail early with no directory changes
+        ///
+        /// This is separate from the main 3 prerequisites (preview=false AND replacement=Some AND regex has a match).
+        /// Invalid regex should fail during regex compilation before any filesystem operations occur.
+        ///
+        /// # Warning:
+        /// This test manipulates the working directory manipulation (which is a process-wide global state).
+        /// Code execution is controlled by a global mutex to make this function thread-safe.
+        #[test]
+        fn test_no_changes_if_invalid_regex() -> Result<()> {
+                utility_with_global_mutex(|| {
+                        let temp_dir = utility_test_dir_gen()?;
+                        std::env::set_current_dir(&temp_dir.path())?;
+
+                        let mut directory_before_state = utility_collect_directory_state(".")?;
+
+                        // Run with invalid regex (should fail and not modify filesystem)
+                        let args = Args {
+                                regex:       "[invalid_regex".to_string(), // Missing closing bracket
+                                replacement: Some("replacement".to_string()),
+                                recurse:     false,
+                                preview:     false,
+                        };
+
+                        let result = app(&args);
+                        assert!(result.is_err(), "Invalid regex should result in error");
+
+                        // The error should be about regex compilation, not filesystem operations
+                        let error_string = format!("{}", result.unwrap_err());
+                        assert!(
+                                error_string.contains("regex") || error_string.contains("parse"),
+                                "Error should mention regex parsing: {}",
+                                error_string
+                        );
+
+                        let mut directory_after_state = utility_collect_directory_state(".")?;
+
+                        // Verify no changes occurred despite the error
+                        directory_before_state.sort();
+                        directory_after_state.sort();
+                        assert_eq!(
+                                directory_before_state, directory_after_state,
+                                "Directory state should be unchanged when regex is invalid"
+                        );
+
+                        temp_dir.close()?;
                         Ok(())
                 })
         }
