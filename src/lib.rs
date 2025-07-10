@@ -340,6 +340,7 @@ pub mod tests {
                         assert!(temp_dir.path().join("changed-changed-file_0b.txt").exists());
                         assert!(temp_dir.path().join("changed-changed-file_0c.txt").exists());
 
+                        // TODO: Consider removing explicit close() - cleanup errors likely don't impact test validity
                         temp_dir.close()?; // temp_dir closed on drop, but this checks for IO errors in closing
                         Ok(())
                 })
@@ -456,6 +457,7 @@ pub mod tests {
                                 .join("changed-dir_d111")
                                 .join("changed-file_d111a.txt")
                                 .exists());
+                        // TODO: Consider removing explicit close() - cleanup errors likely don't impact test validity
                         temp_dir.close()?; // temp_dir closed on drop, but this checks for IO errors in closing
                         Ok(())
                 })
@@ -509,6 +511,7 @@ pub mod tests {
                                         return Err("Base args should cause changes but didn't".into());
                                 }
 
+                                // TODO: Consider removing explicit close() - cleanup errors likely don't impact test validity
                                 temp_dir.close()?; // temp_dir closed on drop, but this checks for IO errors in closing
                         }
 
@@ -601,6 +604,7 @@ pub mod tests {
                                 "Directory state should be unchanged when regex is invalid"
                         );
 
+                        // TODO: Consider removing explicit close() - cleanup errors likely don't impact test validity
                         temp_dir.close()?; // temp_dir closed on drop, but this checks for IO errors in closing
                         Ok(())
                 })
