@@ -331,7 +331,7 @@ pub mod tests_manual {
         fn test_app_with_norecursion() -> Result<()> {
                 utility_with_global_mutex(|| {
                         let temp_dir = utility_test_dir_gen()?;
-                        std::env::set_current_dir(&temp_dir.path())?;
+                        std::env::set_current_dir(temp_dir.path())?;
 
                         // run fresh
                         let args = Args {
@@ -376,7 +376,7 @@ pub mod tests_manual {
         fn test_app_with_yesrecursion() -> Result<()> {
                 utility_with_global_mutex(|| {
                         let temp_dir = utility_test_dir_gen()?;
-                        std::env::set_current_dir(&temp_dir.path())?;
+                        std::env::set_current_dir(temp_dir.path())?;
 
                         // run fresh
                         let args = Args {
@@ -505,7 +505,7 @@ pub mod tests_manual {
                         // Test 0: Verify base configuration DOES cause changes (positive test)
                         {
                                 let temp_dir = utility_test_dir_gen()?;
-                                std::env::set_current_dir(&temp_dir.path())?;
+                                std::env::set_current_dir(temp_dir.path())?;
 
                                 let mut directory_before_state = utility_collect_directory_state(".")?;
                                 app(&base_args)?;
@@ -541,7 +541,7 @@ pub mod tests_manual {
 
                         for (test_name, args) in nochange_test_cases {
                                 let temp_dir = utility_test_dir_gen()?;
-                                std::env::set_current_dir(&temp_dir.path())?;
+                                std::env::set_current_dir(temp_dir.path())?;
 
                                 let mut directory_before_state = utility_collect_directory_state(".")?;
                                 app(&args)?;
@@ -581,7 +581,7 @@ pub mod tests_manual {
         fn test_no_changes_if_invalid_regex() -> Result<()> {
                 utility_with_global_mutex(|| {
                         let temp_dir = utility_test_dir_gen()?;
-                        std::env::set_current_dir(&temp_dir.path())?;
+                        std::env::set_current_dir(temp_dir.path())?;
 
                         let mut directory_before_state = utility_collect_directory_state(".")?;
 
