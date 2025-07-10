@@ -491,7 +491,7 @@ pub mod tests_manual {
         #[test]
         fn test_no_change_if_preview_or_norep_or_nomatch() -> Result<()> {
                 utility_with_global_mutex(|| {
-                        // Define base configuration that SHOULD cause changes
+                        // base config that *should* result in changes
                         let base_args = Args {
                                 regex:       "(file_.*)".to_string(),
                                 replacement: Some("changed-${1}".to_string()),
@@ -499,7 +499,7 @@ pub mod tests_manual {
                                 preview:     false,
                         };
 
-                        // Test 0: Verify base configuration DOES cause changes (positive test)
+                        // test 0, preamble: verify that base config *does* cause changes to files/dirs
                         {
                                 let temp_dir = utility_test_dir_gen()?;
                                 std::env::set_current_dir(temp_dir.path())?;
@@ -513,13 +513,13 @@ pub mod tests_manual {
 
                                 if directory_before_state == directory_after_state {
                                         tracing::error!(
-                                                "POSITIVE TEST FAILED: base_args should have caused changes but didn't"
+                                                "PREAMBLE TEST FAILED: base_args should have caused changes but didn't"
                                         );
-                                        return Err("Base args should cause changes but didn't".into());
+                                        return Err("Base_args should cause changes but didn't".into());
                                 }
                         }
 
-                        // Test 1+: Verify safety variants DON'T cause changes (negative tests)
+                        // test 1+, main: verify that various states prevent changes to files/dirs
                         let nochange_test_cases = [
                                 ("preview_true", Args { preview: true, ..base_args.clone() }),
                                 ("replacement_none", Args { replacement: None, ..base_args.clone() }),
@@ -572,23 +572,49 @@ pub mod tests_manual {
         #[test]
         fn test_no_changes_if_invalid_regex() -> Result<()> {
                 utility_with_global_mutex(|| {
+                        // base config that *should* result in changes
+                        let base_args = Args {
+                                regex:       "(file_.*)".to_string(),
+                                replacement: Some("changed-${1}".to_string()),
+                                recurse:     true,
+                                preview:     false,
+                        };
+
+                        // test 0, preamble: verify that base config *does* cause changes to files/dirs
+                        {
+                                let temp_dir = utility_test_dir_gen()?;
+                                std::env::set_current_dir(temp_dir.path())?;
+
+                                let mut directory_before_state = utility_collect_directory_state(".")?;
+                                app(&base_args)?;
+                                let mut directory_after_state = utility_collect_directory_state(".")?;
+
+                                directory_before_state.sort();
+                                directory_after_state.sort();
+
+                                if directory_before_state == directory_after_state {
+                                        tracing::error!(
+                                                "PREAMBLE TEST FAILED: base_args should have caused changes but didn't"
+                                        );
+                                        return Err("Base_args should cause changes but didn't".into());
+                                }
+                        }
+
                         let temp_dir = utility_test_dir_gen()?;
                         std::env::set_current_dir(temp_dir.path())?;
 
                         let mut directory_before_state = utility_collect_directory_state(".")?;
 
-                        // Run with invalid regex (should fail and not modify filesystem)
-                        let args = Args {
-                                regex:       "[invalid_regex".to_string(), // Missing closing bracket
-                                replacement: Some("replacement".to_string()),
-                                recurse:     false,
-                                preview:     false,
+                        // contains invalid regex (should fail and not modify filesystem)
+                        let invalidregex_args = Args {
+                                regex: "[invalid_regex".to_string(), // Missing closing bracket
+                                ..base_args.clone()
                         };
 
-                        let result = app(&args);
+                        let result = app(&invalidregex_args);
                         assert!(result.is_err(), "Invalid regex should result in error");
 
-                        // The error should be about regex compilation, not filesystem operations
+                        // check error returned
                         let error_string = format!("{}", result.unwrap_err());
                         assert!(
                                 error_string.contains("regex") || error_string.contains("parse"),
@@ -598,7 +624,7 @@ pub mod tests_manual {
 
                         let mut directory_after_state = utility_collect_directory_state(".")?;
 
-                        // Verify no changes occurred despite the error
+                        // check no changes
                         directory_before_state.sort();
                         directory_after_state.sort();
                         assert_eq!(
