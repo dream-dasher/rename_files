@@ -204,13 +204,13 @@ pub mod test_pub_utilities {
         /// Generate a fixed, populated temporary directory.
         ///
         /// Lib/close note:
-        ///  the TempDir *is* closed on drop, however errors are not reported by the drop-close.
-        /// checking for errors can be done with:
+        /// TempDirs *are* closed on drop, however errors are not reported by the drop-close. (this is a limitation of `drop()`)
+        /// In practice there is little need to check here.  This utility does bubble up creation errors and new TempDirs should have a randimized prefix to make collisions unlikely.
+        /// There may be certain cases (particularly on windows machines) where checking is desired.  It can be done as part of manual close with:
         /// ```rust
         /// temp_dir.close()?;
         /// ```
-        /// Checking for errors recommended for these tests (mostly as insurance against OS issues).
-        /// (But unlikely to influence matters.)
+        /// At present, and likely in future, there will be no need for this though.
         ///
         ///
         /// dir_structure:
@@ -361,8 +361,6 @@ pub mod tests_manual {
                         assert!(temp_dir.path().join("changed-changed-file_0b.txt").exists());
                         assert!(temp_dir.path().join("changed-changed-file_0c.txt").exists());
 
-                        // TODO: Consider removing explicit close() - cleanup errors likely don't impact test validity
-                        temp_dir.close()?; // temp_dir closed on drop, but this checks for IO errors in closing
                         Ok(())
                 })
         }
@@ -478,8 +476,7 @@ pub mod tests_manual {
                                 .join("changed-dir_d111")
                                 .join("changed-file_d111a.txt")
                                 .exists());
-                        // TODO: Consider removing explicit close() - cleanup errors likely don't impact test validity
-                        temp_dir.close()?; // temp_dir closed on drop, but this checks for IO errors in closing
+
                         Ok(())
                 })
         }
@@ -520,9 +517,6 @@ pub mod tests_manual {
                                         );
                                         return Err("Base args should cause changes but didn't".into());
                                 }
-
-                                // TODO: Consider removing explicit close() - cleanup errors likely don't impact test validity
-                                temp_dir.close()?; // temp_dir closed on drop, but this checks for IO errors in closing
                         }
 
                         // Test 1+: Verify safety variants DON'T cause changes (negative tests)
@@ -561,8 +555,6 @@ pub mod tests_manual {
                                         )
                                         .into());
                                 }
-
-                                temp_dir.close()?; // temp_dir closed on drop, but this checks for IO errors in closing
                         }
 
                         Ok(())
@@ -613,9 +605,6 @@ pub mod tests_manual {
                                 directory_before_state, directory_after_state,
                                 "Directory state should be unchanged when regex is invalid"
                         );
-
-                        // TODO: Consider removing explicit close() - cleanup errors likely don't impact test validity
-                        temp_dir.close()?; // temp_dir closed on drop, but this checks for IO errors in closing
                         Ok(())
                 })
         }
