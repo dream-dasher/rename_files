@@ -15,10 +15,11 @@ allowed_types = [
     "feat",
     "chore",
     "docs",
+    "sec",
     "style",
-    "refactor",
+    "refact",
     "perf",
     "test",
-    "discovery",
+    "explor",
 ]
 merge_commit = true
