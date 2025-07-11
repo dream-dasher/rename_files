@@ -5,7 +5,7 @@ pub mod error;
 pub mod logging;
 
 use clap::Parser;
-use error::Result;
+use error::{Error, Result};
 use owo_colors::OwoColorize;
 use regex::Regex;
 use walkdir::WalkDir;
@@ -36,7 +36,10 @@ pub struct Args {
 /// Application code.  (main in lib.rs)
 #[tracing::instrument]
 pub fn app(args: &Args) -> Result<()> {
+        // let re = Regex::new(&args.regex)?;
+        // TODO: check
         let re = Regex::new(&args.regex)?;
+        //
 
         if let Some(replacement) = &args.replacement {
                 check_for_common_syntax_error(replacement)?;
@@ -118,14 +121,17 @@ fn core_process_loop(walkable_space: WalkDir, re: &Regex, args: &Args) -> Result
                         &filename.black().bold().on_green(),
                         &new_filename.red().bold().on_blue()
                 );
+                // std::fs::rename(entry, entry.with_file_name(new_filename.as_ref()))?;
+                // TODO: check
                 std::fs::rename(entry, entry.with_file_name(new_filename.as_ref()))?;
+                //
                 // std::fs::rename(entry, new_filename.as_ref())?;
         }
         println!("Total matches: {}", num_matches.cyan());
         Ok(())
 }
 
-/// Guard: Flagging unintended syntax
+/// # Guard: Flagging unintended syntax
 ///
 /// Checks replacement string for capture references making a common syntax error:
 /// A bare reference number followed by chars that would be combined with it and read as a name
@@ -137,12 +143,14 @@ fn check_for_common_syntax_error(rep_arg: &str) -> Result<()> {
 
         let re_check = Regex::new(RE_SYNTAX_WARN).expect("valid, static regex");
         if let Some(cap) = re_check.captures(rep_arg) {
+                let ambiguous_whole = cap[0].to_string();
+                let ambiguous_head = cap[1].to_string();
                 tracing::warn!(
                         "\nWarning:\ncapture reference `{}` is being read as `{}`\nIf this is not intended use: `${{_}}...` instead.",
-                        cap[1].to_string().blue(),
-                        cap[0].to_string().red()
+                        ambiguous_head.blue(),
+                        ambiguous_whole.red(),
                 );
-                return Err("Ambiguous replacement syntax".into());
+                return Err(Error::AmbiguousReplacementSyntax { ambiguous_head, ambiguous_whole });
         }
         Ok(())
 }
@@ -175,9 +183,7 @@ pub mod test_pub_utilities {
         use tempfile::TempDir;
 
         use super::*;
-
-        pub type Result<T> = core::result::Result<T, Error>;
-        pub type Error = Box<dyn std::error::Error>;
+        use anyhow::Result;
 
         /// Forces serialization within a process by running code under a global mutex.
         ///
@@ -277,9 +283,8 @@ pub mod tests_manual {
         use crate::test_pub_utilities::{
                 utility_collect_directory_state, utility_test_dir_gen, utility_with_global_mutex,
         };
-
-        pub type Result<T> = core::result::Result<T, Error>;
-        pub type Error = Box<dyn std::error::Error>;
+        use anyhow::Result;
+        use anyhow::anyhow;
 
         // Test the app() function
         // Test the core_process_loop() function
@@ -518,7 +523,7 @@ pub mod tests_manual {
                                         tracing::error!(
                                                 "PREAMBLE TEST FAILED: base_args should have caused changes but didn't"
                                         );
-                                        return Err("Base_args should cause changes but didn't".into());
+                                        return Err(anyhow!("Base_args should cause changes but didn't"));
                                 }
                         }
 
@@ -552,11 +557,10 @@ pub mod tests_manual {
                                                 "NO-CHANGE TEST FAILED: \"{}\" should not have changed directory state, but did",
                                                 test_name
                                         );
-                                        return Err(format!(
+                                        return Err(anyhow!(
                                                 "No-Change test \"{}\" should have resulted in changed directory state, but did",
                                                 test_name
-                                        )
-                                        .into());
+                                        ));
                                 }
                         }
 
@@ -599,7 +603,7 @@ pub mod tests_manual {
                                         tracing::error!(
                                                 "PREAMBLE TEST FAILED: base_args should have caused changes but didn't"
                                         );
-                                        return Err("Base_args should cause changes but didn't".into());
+                                        return Err(anyhow!("Base_args should cause changes but didn't"));
                                 }
                         }
 
@@ -646,6 +650,7 @@ pub mod tests_manual {
 /// 2. use *rust-analyzer* lsp **action** to run individual test with update
 #[cfg(test)]
 pub mod tests_snapshot {
+        use anyhow::Result;
         use expect_test::{Expect, expect};
         use test_log::test;
 
@@ -653,9 +658,6 @@ pub mod tests_snapshot {
         use crate::test_pub_utilities::{
                 utility_collect_directory_state, utility_test_dir_gen, utility_with_global_mutex,
         };
-
-        pub type Result<T> = core::result::Result<T, Error>;
-        pub type Error = Box<dyn std::error::Error>;
 
         /// Utility function for snapshot testing: lossly string image of a directory.
         ///
@@ -742,51 +744,57 @@ pub mod tests_snapshot {
                 closure_check(
                         r"[unclosed",
                         expect![[r#"
-                    Err(
-                        Syntax(
-                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                        regex parse error:
-                            [unclosed
-                            ^
-                        error: unclosed character class
-                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                        ),
-                    )
-                "#]],
+                            Err(
+                                Regex(
+                                    Syntax(
+                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                                    regex parse error:
+                                        [unclosed
+                                        ^
+                                    error: unclosed character class
+                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                                    ),
+                                ),
+                            )
+                        "#]],
                 )?;
 
                 //  "empty_named_group"
                 closure_check(
                         r"(?P<>)",
                         expect![[r#"
-                    Err(
-                        Syntax(
-                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                        regex parse error:
-                            (?P<>)
-                                ^
-                        error: empty capture group name
-                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                        ),
-                    )
-                "#]],
+                            Err(
+                                Regex(
+                                    Syntax(
+                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                                    regex parse error:
+                                        (?P<>)
+                                            ^
+                                    error: empty capture group name
+                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                                    ),
+                                ),
+                            )
+                        "#]],
                 )?;
 
                 //  "trailing_backslash"
                 closure_check(
                         r"\",
                         expect![[r#"
-                    Err(
-                        Syntax(
-                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                        regex parse error:
-                            \
-                            ^
-                        error: incomplete escape sequence, reached end of pattern prematurely
-                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                        ),
-                    )
-                "#]],
+                            Err(
+                                Regex(
+                                    Syntax(
+                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                                    regex parse error:
+                                        \
+                                        ^
+                                    error: incomplete escape sequence, reached end of pattern prematurely
+                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                                    ),
+                                ),
+                            )
+                        "#]],
                 )?;
 
                 Ok(())
@@ -814,7 +822,10 @@ pub mod tests_snapshot {
                 });
                 let expected = expect![[r#"
                     Err(
-                        "Ambiguous replacement syntax",
+                        AmbiguousReplacementSyntax {
+                            ambiguous_whole: "$1text",
+                            ambiguous_head: "$1",
+                        },
                     )
                 "#]];
                 expected.assert_debug_eq(&actual);
@@ -854,9 +865,6 @@ pub mod tests_snapshot {
 //         use crate::test_pub_utilities::{
 //                 utility_collect_directory_state, utility_test_dir_gen, utility_with_global_mutex,
 //         };
-
-//         pub type Result<T> = core::result::Result<T, Error>;
-//         pub type Error = Box<dyn std::error::Error>;
 
 //         /// Custom generator for known-good regex strings
 //         #[derive(Debug, Clone)]

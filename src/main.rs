@@ -12,5 +12,14 @@ use rename_files::{Args, app, error::Result, logging};
 fn main() -> Result<()> {
         logging::tracing_subscribe_boilerplate("warn");
         let args = Args::parse();
-        app(&args)
+        // app(&args)
+        // TODO: check
+
+        if let Err(e) = app(&args) {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+        }
+
+        Ok(())
+        //
 }

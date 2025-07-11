@@ -21,14 +21,16 @@ owo-colors = "4"
 regex = { version = "1", features = ["logging"] } # "logging"
 tracing = { version = "0.1", features = [] } # "release_max_level_warn"^"release_max_level_off"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] } # "env-filter","json"
+thiserror = "2"
 walkdir = "2"
 
 [dev-dependencies]
-tempfile = "3"
-test-log = { version = "0.2", features = ["trace"] } # "trace"
+anyhow = { version = "1", features = [] } # "backtrace"
+expect-test = "1"
 quickcheck = "1"
 quickcheck_macros = "1"
-expect-test = "1"
+tempfile = "3"
+test-log = { version = "0.2", features = ["trace"] } # "trace"
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
