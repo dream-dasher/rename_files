@@ -26,9 +26,9 @@ walkdir = "2"
 [dev-dependencies]
 tempfile = "3"
 test-log = { version = "0.2", features = ["trace"] } # "trace"
-# quickcheck = "1"
-# quickcheck_macros = "1"
-# insta = { version = "1", features = [] } # "clap","csv","json","redactions","serde","toml","walkdir",
+quickcheck = "1"
+quickcheck_macros = "1"
+expect-test = "1"
 
 # The profile that 'cargo dist' will build with
 [profile.dist]

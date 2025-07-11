@@ -639,102 +639,362 @@ pub mod tests_manual {
         }
 }
 
-// #[cfg(test)]
-// pub mod tests_snapshot {
-//         use insta::assert_snapshot;
-//         use test_log::test;
-//
-//         use super::*;
-//         use crate::test_pub_utilities::{utility_test_dir_gen, utility_with_global_mutex};
-//
-//         pub type Result<T> = core::result::Result<T, Error>;
-//         pub type Error = Box<dyn std::error::Error>;
-//
-//         /// Utility function to test app behavior and capture error messages for snapshot testing
-//         /// Note: This doesn't capture stdout (println! output) - for that we'd need to run the actual binary
-//         fn utility_capture_app_result(args: &Args) -> Result<String> {
-//                 let temp_dir = utility_test_dir_gen()?;
-//                 std::env::set_current_dir(&temp_dir.path())?;
-//
-//                 // Run the app and capture success/error result
-//                 let result = app(args);
-//
-//                 match result {
-//                         Ok(()) => Ok("Success: Operation completed".to_string()),
-//                         Err(e) => Ok(format!("Error: {}", e)),
-//                 }
-//         }
-//
-//         /// Test CLI output snapshots for preview mode
-//         #[test]
-//         fn test_snap_preview_mode() -> Result<()> {
-//                 utility_with_global_mutex(|| {
-//                         let args = Args {
-//                                 regex:       "(file_.*)".to_string(),
-//                                 replacement: Some("changed-${1}".to_string()),
-//                                 recurse:     false,
-//                                 preview:     true,
-//                         };
-//
-//                         let output = utility_capture_app_result(&args)?;
-//                         assert_snapshot!("preview_mode_output", output);
-//                         Ok(())
-//                 })
-//         }
-//
-//         /// Test CLI output snapshots for search-only mode
-//         #[test]
-//         fn test_snap_search_only() -> Result<()> {
-//                 utility_with_global_mutex(|| {
-//                         let args = Args {
-//                                 regex:       "(file_.*)".to_string(),
-//                                 replacement: None,
-//                                 recurse:     false,
-//                                 preview:     false,
-//                         };
-//
-//                         let output = utility_capture_app_result(&args)?;
-//                         assert_snapshot!("search_only_output", output);
-//                         Ok(())
-//                 })
-//         }
-//
-//         /// Test CLI output snapshots for invalid regex
-//         #[test]
-//         fn test_snap_invalid_regex() -> Result<()> {
-//                 utility_with_global_mutex(|| {
-//                         let args = Args {
-//                                 regex:       "[invalid_regex".to_string(),
-//                                 replacement: Some("replacement".to_string()),
-//                                 recurse:     false,
-//                                 preview:     false,
-//                         };
-//
-//                         let output = utility_capture_app_result(&args)?;
-//                         assert_snapshot!("invalid_regex_output", output);
-//                         Ok(())
-//                 })
-//         }
-//
-//         /// Test CLI output snapshots for no matches
-//         #[test]
-//         fn test_snap_no_matches() -> Result<()> {
-//                 utility_with_global_mutex(|| {
-//                         let args = Args {
-//                                 regex:       "no_match_pattern_xyz".to_string(),
-//                                 replacement: Some("replacement".to_string()),
-//                                 recurse:     false,
-//                                 preview:     false,
-//                         };
-//
-//                         let output = utility_capture_app_result(&args)?;
-//                         assert_snapshot!("no_matches_output", output);
-//                         Ok(())
-//                 })
-//         }
-// }
+/// # Snapshots with `expect-test`
+///
+/// ## Control
+/// 1. env-var controlling expect-test (snapshot lib) behavior: `UPDATE_EXPECT=1`
+/// 2. use *rust-analyzer* lsp **action** to run individual test with update
+#[cfg(test)]
+pub mod tests_snapshot {
+        use expect_test::{Expect, expect};
+        use test_log::test;
+
+        use super::*;
+        use crate::test_pub_utilities::{
+                utility_collect_directory_state, utility_test_dir_gen, utility_with_global_mutex,
+        };
+
+        pub type Result<T> = core::result::Result<T, Error>;
+        pub type Error = Box<dyn std::error::Error>;
+
+        /// Utility function for snapshot testing: lossly string image of a directory.
+        ///
+        /// Capture directory paths as strings *lossily* and join via `\n`.
+        /// Paths are sorted *prior* to lossy-string conversion.
+        fn utility_capture_directory_tree_as_string(path: &str) -> Result<String> {
+                let mut entries = utility_collect_directory_state(path)?;
+                entries.sort();
+                let formatted = entries
+                        .iter()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                Ok(formatted)
+        }
+
+        /// # (¡dev-xplr!) Snapshot (expect-test) replication of a manual test. (Mostly here for Dev Exploration purposes)
+        ///
+        /// # Warning:
+        /// This test manipulates the working directory manipulation (which is a process-wide global state).
+        /// Code execution is controlled by a global mutex to make this function thread-safe.
+        #[test]
+        fn test_snap_directory_structure_after_rename() -> Result<()> {
+                utility_with_global_mutex(|| {
+                        let temp_dir = utility_test_dir_gen()?;
+                        std::env::set_current_dir(temp_dir.path())?;
+
+                        let args = Args {
+                                regex: "(file_.*)".to_string(),
+                                replacement: Some("renamed_${1}".to_string()),
+                                recurse: false,
+                                preview: false,
+                        };
+
+                        app(&args)?;
+                        let actual = utility_capture_directory_tree_as_string(".")?;
+                        let expected = expect![[r#"
+                            .
+                            ./dir_1
+                            ./dir_1/dir_11
+                            ./dir_1/dir_11/dir_111
+                            ./dir_1/dir_11/dir_111/file_111a.txt
+                            ./dir_1/dir_11/file_11a.txt
+                            ./dir_1/file_1a.txt
+                            ./dir_2
+                            ./dir_2/dir_21
+                            ./dir_2/dir_21/dir_211
+                            ./renamed_file_0a.txt
+                            ./renamed_file_0b.txt
+                            ./renamed_file_0c.txt"#]];
+                        expected.assert_eq(&actual);
+                        Ok(())
+                })
+        }
+
+        /// Snapshot test: error messages for a small sample of bad pre-regex strings
+        ///
+        /// # Warning:
+        /// This test manipulates the working directory manipulation (which is a process-wide global state).
+        /// Code execution is controlled by a global mutex to make this function thread-safe.
+        #[test]
+        fn test_snap_regex_error_messages() -> Result<()> {
+                // base config that *should* result in changes
+                let base_args = Args {
+                        regex: ".*".to_string(),
+                        replacement: Some("changed-${1}".to_string()),
+                        recurse: true,
+                        preview: false,
+                };
+
+                let closure_check = |preregex: &str, expected: Expect| -> Result<()> {
+                        let args_with_bad_preregex = Args { regex: preregex.to_string(), ..base_args.clone() };
+
+                        let temp_dir = utility_test_dir_gen()?;
+                        let actual = utility_with_global_mutex(|| {
+                                std::env::set_current_dir(temp_dir.path())?;
+                                app(&args_with_bad_preregex)
+                        });
+                        expected.assert_debug_eq(&actual);
+                        Ok(())
+                };
+
+                //  "unclosed_bracket"
+                closure_check(
+                        r"[unclosed",
+                        expect![[r#"
+                    Err(
+                        Syntax(
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                        regex parse error:
+                            [unclosed
+                            ^
+                        error: unclosed character class
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                        ),
+                    )
+                "#]],
+                )?;
+
+                //  "empty_named_group"
+                closure_check(
+                        r"(?P<>)",
+                        expect![[r#"
+                    Err(
+                        Syntax(
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                        regex parse error:
+                            (?P<>)
+                                ^
+                        error: empty capture group name
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                        ),
+                    )
+                "#]],
+                )?;
+
+                //  "trailing_backslash"
+                closure_check(
+                        r"\",
+                        expect![[r#"
+                    Err(
+                        Syntax(
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                        regex parse error:
+                            \
+                            ^
+                        error: incomplete escape sequence, reached end of pattern prematurely
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                        ),
+                    )
+                "#]],
+                )?;
+
+                Ok(())
+        }
+
+        /// Snapshot test: error messages for a small sample of bad replacement values
+        ///
+        /// # Warning:
+        /// This test manipulates the working directory manipulation (which is a process-wide global state).
+        /// Code execution is controlled by a global mutex to make this function thread-safe.
+        #[test]
+        fn test_snap_rep_error_messages() -> Result<()> {
+                const AMBIG_REP_EXAMPLE: &str = r"$1text";
+                let args = Args {
+                        regex: r".*".to_string(),
+                        replacement: Some(AMBIG_REP_EXAMPLE.to_string()),
+                        recurse: true,
+                        preview: true,
+                };
+                let temp_dir = utility_test_dir_gen()?;
+
+                let actual = utility_with_global_mutex(|| {
+                        std::env::set_current_dir(temp_dir.path())?;
+                        app(&args)
+                });
+                let expected = expect![[r#"
+                    Err(
+                        "Ambiguous replacement syntax",
+                    )
+                "#]];
+                expected.assert_debug_eq(&actual);
+
+                Ok(())
+        }
+
+        // /// Test regex replacement examples snapshot
+        // #[test]
+        // fn test_snap_replacement_examples() -> Result<()> {
+        //         let test_cases = vec![
+        //                 ("file_123.txt", r"(\d+)", "num_${1}"),
+        //                 ("CamelCase.rs", r"([A-Z])", "_${1}"),
+        //                 ("test_file.txt", r"test_", "new_"),
+        //         ];
+
+        //         let mut results = Vec::new();
+        //         for (input, pattern, replacement) in test_cases {
+        //                 let re = Regex::new(pattern)?;
+        //                 let result = re.replace(input, replacement);
+        //                 results.push(format!("{} -> {}", input, result));
+        //         }
+
+        //         let formatted_results = results.join("\n");
+        //         assert_snapshot!("replacement_examples", formatted_results);
+        //         Ok(())
+        // }
+}
 
 // #[cfg(test)]
 // pub mod tests_random_sample {
-//     // QuickCheck tests will go here in Stage 3
+//         use quickcheck::{Arbitrary, Gen, TestResult};
+//         use quickcheck_macros::quickcheck;
+//         use test_log::test;
+
+//         use super::*;
+//         use crate::test_pub_utilities::{
+//                 utility_collect_directory_state, utility_test_dir_gen, utility_with_global_mutex,
+//         };
+
+//         pub type Result<T> = core::result::Result<T, Error>;
+//         pub type Error = Box<dyn std::error::Error>;
+
+//         /// Custom generator for known-good regex strings
+//         #[derive(Debug, Clone)]
+//         struct ValidRegexString(String);
+
+//         impl Arbitrary for ValidRegexString {
+//                 fn arbitrary(g: &mut Gen) -> Self {
+//                         let patterns =
+//                                 ["file.*", r"\d+", "[a-z]+", ".*\\.txt", "(test|spec)", "[A-Za-z_][A-Za-z0-9_]*"];
+//                         let idx = usize::arbitrary(g) % patterns.len();
+//                         ValidRegexString(patterns[idx].to_string())
+//                 }
+//         }
+
+//         /// Test that preview=true never changes filesystem regardless of other args
+//         #[quickcheck]
+//         fn test_qc_preview_never_changes_filesystem(
+//                 regex: ValidRegexString,
+//                 replacement: Option<String>,
+//                 recurse: bool,
+//         ) -> TestResult {
+//                 let result = utility_with_global_mutex(|| -> Result<bool> {
+//                         let temp_dir = utility_test_dir_gen()?;
+//                         std::env::set_current_dir(temp_dir.path())?;
+
+//                         let mut before_state = utility_collect_directory_state(".")?;
+
+//                         let args = Args {
+//                                 regex: regex.0,
+//                                 replacement,
+//                                 recurse,
+//                                 preview: true, // This should prevent all changes
+//                         };
+
+//                         let _ = app(&args); // Ignore result, just check filesystem state
+
+//                         let mut after_state = utility_collect_directory_state(".")?;
+
+//                         before_state.sort();
+//                         after_state.sort();
+
+//                         Ok(before_state == after_state)
+//                 });
+
+//                 match result {
+//                         Ok(unchanged) => TestResult::from_bool(unchanged),
+//                         Err(_) => TestResult::discard(), // Discard invalid test cases
+//                 }
+//         }
+
+//         /// Test that replacement=None never changes filesystem
+//         #[quickcheck]
+//         fn test_qc_no_change_if_norep(regex: ValidRegexString, recurse: bool) -> TestResult {
+//                 let result = utility_with_global_mutex(|| -> Result<bool> {
+//                         let temp_dir = utility_test_dir_gen()?;
+//                         std::env::set_current_dir(temp_dir.path())?;
+
+//                         let mut before_state = utility_collect_directory_state(".")?;
+
+//                         let args = Args {
+//                                 regex: regex.0,
+//                                 replacement: None, // This should prevent all changes
+//                                 recurse,
+//                                 preview: false,
+//                         };
+
+//                         let _ = app(&args); // Ignore result, just check filesystem state
+
+//                         let mut after_state = utility_collect_directory_state(".")?;
+
+//                         before_state.sort();
+//                         after_state.sort();
+
+//                         Ok(before_state == after_state)
+//                 });
+
+//                 match result {
+//                         Ok(unchanged) => TestResult::from_bool(unchanged),
+//                         Err(_) => TestResult::discard(),
+//                 }
+//         }
+
+//         /// Test replacement behavior using built-in PathBuf generator
+//         #[quickcheck]
+//         fn test_qc_replacement_uses_real_filenames(
+//                 path: std::path::PathBuf,
+//                 regex: ValidRegexString,
+//                 replacement: String,
+//         ) -> TestResult {
+//                 use regex::Regex;
+
+//                 // Extract filename from generated path
+//                 let filename = match path.file_name().and_then(|n| n.to_str()) {
+//                         Some(f) if !f.is_empty() => f,
+//                         _ => return TestResult::discard(),
+//                 };
+
+//                 let re = match Regex::new(&regex.0) {
+//                         Ok(re) => re,
+//                         Err(_) => return TestResult::discard(),
+//                 };
+
+//                 // Test that the same input produces the same output (determinism)
+//                 let result1 = re.replace(filename, &replacement);
+//                 let result2 = re.replace(filename, &replacement);
+
+//                 TestResult::from_bool(result1 == result2)
+//         }
+
+//         /// Test no changes when regex doesn't match anything
+//         #[quickcheck]
+//         fn test_qc_no_change_if_no_matches(replacement: Option<String>, recurse: bool) -> TestResult {
+//                 let result = utility_with_global_mutex(|| -> Result<bool> {
+//                         let temp_dir = utility_test_dir_gen()?;
+//                         std::env::set_current_dir(temp_dir.path())?;
+
+//                         let mut before_state = utility_collect_directory_state(".")?;
+
+//                         let args = Args {
+//                                 regex: "definitely_wont_match_anything_xyz123".to_string(),
+//                                 replacement,
+//                                 recurse,
+//                                 preview: false,
+//                         };
+
+//                         let _ = app(&args); // Ignore result, just check filesystem state
+
+//                         let mut after_state = utility_collect_directory_state(".")?;
+
+//                         before_state.sort();
+//                         after_state.sort();
+
+//                         Ok(before_state == after_state)
+//                 });
+
+//                 match result {
+//                         Ok(unchanged) => TestResult::from_bool(unchanged),
+//                         Err(_) => TestResult::discard(),
+//                 }
+//         }
 // }
