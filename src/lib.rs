@@ -133,7 +133,7 @@ fn core_process_loop(walkable_space: WalkDir, re: &Regex, args: &Args) -> Result
 /// e.g. `$1abc` will be parsed as ($1abc) NOT ($1)(abc) -- `${1}abc` is proper syntax
 #[tracing::instrument]
 fn check_for_common_syntax_error(rep_arg: &str) -> Result<()> {
-        const RE_SYNTAX_WARN: &str = r"(\$\d)[^\d\$\s]+";
+        const RE_SYNTAX_WARN: &str = r"(\$\d+)[^\d\$\s]+";
 
         let re_check = Regex::new(RE_SYNTAX_WARN).expect("valid, static regex");
         if let Some(cap) = re_check.captures(rep_arg) {
