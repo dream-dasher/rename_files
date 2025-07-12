@@ -27,9 +27,9 @@ walkdir = "2"
 [dev-dependencies]
 anyhow = { version = "1", features = [] } # "backtrace"
 expect-test = "1"
-quickcheck = "1"
-quickcheck_macros = "1"
-rand = {version = "0.9", features = []} # "serde", "simd_support", "log"
+# quickcheck = "1"
+# quickcheck_macros = "1"
+# rand = {version = "0.9", features = []} # "serde", "simd_support", "log"
 tempfile = "3"
 test-log = { version = "0.2", features = ["trace"] } # "trace"
 
