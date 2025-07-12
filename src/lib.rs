@@ -182,15 +182,14 @@ fn walkdir_build_with_depths(does_recurse: bool) -> WalkDir {
 /// To work around this we have the utility `utility_with_global_mutex`, which can take a closure and execute only when mutex guard is held.
 #[cfg(test)]
 mod test {
+        use super::*;
         use std::{
                 fs::{self, File},
                 sync::{Mutex, OnceLock},
         };
-
         use tempfile::TempDir;
 
-        use super::*;
-        use anyhow::Result;
+        type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
         /// Forces serialization within a process by running code under a global mutex.
         ///
@@ -283,10 +282,7 @@ mod test {
         /// Manual, hardcoded "spot" tests (classic tests)
         #[cfg(test)]
         mod tests_manual {
-
                 use super::*;
-                use anyhow::Result;
-                use anyhow::anyhow;
                 use test_log::test;
 
                 /// Test the check_for_common_syntax_error() function
@@ -523,7 +519,7 @@ mod test {
                                                 tracing::error!(
                                                         "PREAMBLE TEST FAILED: base_args should have caused changes but didn't"
                                                 );
-                                                return Err(anyhow!("Base_args should cause changes but didn't"));
+                                                return Err("Base_args should cause changes but didn't".into());
                                         }
                                 }
 
@@ -557,10 +553,10 @@ mod test {
                                                         "NO-CHANGE TEST FAILED: \"{}\" should not have changed directory state, but did",
                                                         test_name
                                                 );
-                                                return Err(anyhow!(
+                                                return Err(format!(
                                                         "No-Change test \"{}\" should have resulted in changed directory state, but did",
                                                         test_name
-                                                ));
+                                                ).into());
                                         }
                                 }
 
@@ -603,7 +599,7 @@ mod test {
                                                 tracing::error!(
                                                         "PREAMBLE TEST FAILED: base_args should have caused changes but didn't"
                                                 );
-                                                return Err(anyhow!("Base_args should cause changes but didn't"));
+                                                return Err("Base_args should cause changes but didn't".into());
                                         }
                                 }
 
@@ -663,7 +659,6 @@ mod test {
         #[cfg(test)]
         mod tests_snapshot {
                 use super::*;
-                use anyhow::Result;
                 use expect_test::{Expect, expect};
                 use test_log::test;
 
