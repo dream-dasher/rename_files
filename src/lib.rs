@@ -187,6 +187,7 @@ mod test {
                 sync::{Mutex, OnceLock},
         };
 
+        use rand::seq::IndexedRandom;
         use tempfile::TempDir;
 
         use super::*;
@@ -245,7 +246,7 @@ mod test {
         ///   - root/dir_2/dir_21/
         ///   - root/dir_2/dir_21/dir_211/
         /// ```
-        fn utility_test_dir_gen() -> Result<TempDir> {
+        fn utility_fixed_populated_tempdir_gen() -> Result<TempDir> {
                 let dir_root = TempDir::new()?;
                 File::create(dir_root.path().join("file_0a.txt"))?;
                 File::create(dir_root.path().join("file_0b.txt"))?;
@@ -268,6 +269,69 @@ mod test {
                 fs::create_dir(&dir_21)?;
                 fs::create_dir(&dir_211)?;
 
+                Ok(dir_root)
+        }
+
+        /// # Generates a populated temporary directory from a vector of paths.
+        ///
+        /// - Reporudcible: creates a rand seed from hash of vector for reproducibility
+        /// - QuickCheck compatible: `vec<Path>` will has a default generator
+        ///
+        fn utility_rand_from_vec_tempdir_gen(pathbufs: Vec<std::path::PathBuf>) -> Result<TempDir> {
+                use rand::rngs::StdRng;
+                use rand::{Rng, SeedableRng};
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::{Hash, Hasher};
+
+                // let hash = paths.hash();
+                // // convert hash to `u64`
+                // let hash_u64 = hash as u64;
+                // // create **rand** seed with `sead_from_u64`
+                // let seed = rand::SeedableRng::seed_from_u64(hash_u64);
+                // // choose number from 0..len -> numbers to right of that are files, left are dirs
+                // // child_dirs = 0, for each child dir, pop off and choose from 0..child_dirs, appending to said dir (0= parent)
+                // //for files, do the same thing, but no longer incrementing the child_dirs number
+
+                let dir_root = TempDir::new()?;
+                if pathbufs.is_empty() {
+                        return Ok(dir_root);
+                }
+
+                // hash for reproducibility
+                // while we'd get reproducibility from just, for example `paths.len() as u64`
+                // that would result in identical rand values for dirs of same number of elements
+                // creating less variability than we'd like
+                let mut rng_seeded = {
+                        let mut hasher = DefaultHasher::new();
+                        pathbufs.hash(&mut hasher);
+                        let hash = hasher.finish();
+                        StdRng::seed_from_u64(hash)
+                };
+
+                // Split pathbs vec into dir-pathbs and file-pathbs
+                let dirfile_splitpoint = rng_seeded.random_range(0..=pathbufs.len());
+                let (dir_pathbufs, file_pathbufs) = pathbufs.split_at(dirfile_splitpoint);
+                let mut joined_dirs = vec![dir_root.path().to_path_buf()];
+
+                // let dir_111 = dir_11.join("dir_111");
+                // fs::create_dir(&dir_1)?;
+                // fs::create_dir(&dir_11)?;
+                // fs::create_dir(&dir_111)?;
+                // File::create(dir_1.join("file_1a.txt"))?;
+
+                // child_dirs = 0, for each child dir, pop off and choose from 0..child_dirs, appending to said dir (0= parent)
+                // join dirs with random attachment points
+                for dir in dir_pathbufs {
+                        let entry = joined_dirs.choose(&mut rng_seeded).expect("vec guaranteed not empty");
+                        let joined_path = entry.join(dir);
+                        fs::create_dir(&joined_path)?;
+                        joined_dirs.push(joined_path);
+                }
+                for file in file_pathbufs {
+                        let entry = joined_dirs.choose(&mut rng_seeded).expect("vec guaranteed not empty");
+                        let joined_path = entry.join(file);
+                        File::create(&joined_path)?;
+                }
                 Ok(dir_root)
         }
 
@@ -338,7 +402,7 @@ mod test {
                 #[test]
                 fn test_app_with_norecursion() -> Result<()> {
                         utility_with_global_mutex(|| {
-                                let temp_dir = utility_test_dir_gen()?;
+                                let temp_dir = utility_fixed_populated_tempdir_gen()?;
                                 std::env::set_current_dir(temp_dir.path())?;
 
                                 // run fresh
@@ -381,7 +445,7 @@ mod test {
                 #[test]
                 fn test_app_with_yesrecursion() -> Result<()> {
                         utility_with_global_mutex(|| {
-                                let temp_dir = utility_test_dir_gen()?;
+                                let temp_dir = utility_fixed_populated_tempdir_gen()?;
                                 std::env::set_current_dir(temp_dir.path())?;
 
                                 // run fresh
@@ -509,7 +573,7 @@ mod test {
 
                                 // test 0, preamble: verify that base config *does* cause changes to files/dirs
                                 {
-                                        let temp_dir = utility_test_dir_gen()?;
+                                        let temp_dir = utility_fixed_populated_tempdir_gen()?;
                                         std::env::set_current_dir(temp_dir.path())?;
 
                                         let mut directory_before_state = utility_collect_directory_state(".")?;
@@ -542,7 +606,7 @@ mod test {
                                 ];
 
                                 for (test_name, args) in nochange_test_cases {
-                                        let temp_dir = utility_test_dir_gen()?;
+                                        let temp_dir = utility_fixed_populated_tempdir_gen()?;
                                         std::env::set_current_dir(temp_dir.path())?;
 
                                         let mut directory_before_state = utility_collect_directory_state(".")?;
@@ -589,7 +653,7 @@ mod test {
 
                                 // test 0, preamble: verify that base config *does* cause changes to files/dirs
                                 {
-                                        let temp_dir = utility_test_dir_gen()?;
+                                        let temp_dir = utility_fixed_populated_tempdir_gen()?;
                                         std::env::set_current_dir(temp_dir.path())?;
 
                                         let mut directory_before_state = utility_collect_directory_state(".")?;
@@ -607,7 +671,7 @@ mod test {
                                         }
                                 }
 
-                                let temp_dir = utility_test_dir_gen()?;
+                                let temp_dir = utility_fixed_populated_tempdir_gen()?;
                                 std::env::set_current_dir(temp_dir.path())?;
 
                                 let mut directory_before_state = utility_collect_directory_state(".")?;
@@ -691,7 +755,7 @@ mod test {
                 #[test]
                 fn test_snap_directory_structure_after_rename() -> Result<()> {
                         utility_with_global_mutex(|| {
-                                let temp_dir = utility_test_dir_gen()?;
+                                let temp_dir = utility_fixed_populated_tempdir_gen()?;
                                 std::env::set_current_dir(temp_dir.path())?;
 
                                 let args = Args {
@@ -740,7 +804,7 @@ mod test {
                         let closure_check = |preregex: &str, expected: Expect| -> Result<()> {
                                 let args_with_bad_preregex = Args { regex: preregex.to_string(), ..base_args.clone() };
 
-                                let temp_dir = utility_test_dir_gen()?;
+                                let temp_dir = utility_fixed_populated_tempdir_gen()?;
                                 let actual = utility_with_global_mutex(|| {
                                         std::env::set_current_dir(temp_dir.path())?;
                                         app(&args_with_bad_preregex)
@@ -823,7 +887,7 @@ mod test {
                                 recurse: true,
                                 preview: true,
                         };
-                        let temp_dir = utility_test_dir_gen()?;
+                        let temp_dir = utility_fixed_populated_tempdir_gen()?;
 
                         let actual = utility_with_global_mutex(|| {
                                 std::env::set_current_dir(temp_dir.path())?;
@@ -865,9 +929,12 @@ mod test {
         }
 
         /// # "Property Test" using random sampling with QuickCheck
+        ///
+        /// TODO: these are silly PoC
         #[cfg(test)]
         pub mod tests_random_sample_property {
                 use super::*;
+                use anyhow::{Result, anyhow};
                 use quickcheck::{Arbitrary, Gen, TestResult};
                 use quickcheck_macros::quickcheck;
                 use test_log::test;
@@ -895,43 +962,42 @@ mod test {
                 #[quickcheck]
                 fn test_qc_no_change_if_preview(
                         regex: SampleValidPreRegex,
+                        paths: Vec<std::path::PathBuf>,
                         replacement: Option<String>,
                         recurse: bool,
-                ) -> TestResult {
-                        let result = utility_with_global_mutex(|| -> Result<bool> {
-                                let temp_dir = utility_test_dir_gen()?;
+                ) -> Result<()> {
+                        let temp_dir = utility_fixed_populated_tempdir_gen()?;
+                        let args = Args {
+                                regex: regex.0,
+                                replacement,
+                                recurse,
+                                preview: true, // This should prevent all changes
+                        };
+                        utility_with_global_mutex(|| {
                                 std::env::set_current_dir(temp_dir.path())?;
-
                                 let mut before_state = utility_collect_directory_state(".")?;
+                                // println!("{:?}", path.to_string_lossy().len());
+                                println!("\n\n------------------------{:?}", paths.len());
 
-                                let args = Args {
-                                        regex: regex.0,
-                                        replacement,
-                                        recurse,
-                                        preview: true, // This should prevent all changes
-                                };
-
-                                let _ = app(&args); // Ignore result, just check filesystem state
-
+                                // ignore result (e.g. due to bad regex), we only care about filesystem state
+                                let _ = app(&args);
                                 let mut after_state = utility_collect_directory_state(".")?;
 
                                 before_state.sort();
                                 after_state.sort();
 
-                                Ok(before_state == after_state)
-                        });
-
-                        match result {
-                                Ok(unchanged) => TestResult::from_bool(unchanged),
-                                Err(_) => TestResult::discard(), // Discard invalid test cases
-                        }
+                                match before_state == after_state {
+                                        true => Ok(()),
+                                        false => Err(anyhow!("Filesystem state changed")),
+                                }
+                        })
                 }
 
                 /// Test that replacement=None never changes filesystem
                 #[quickcheck]
                 fn test_qc_no_change_if_norep(regex: SampleValidPreRegex, recurse: bool) -> TestResult {
                         let result = utility_with_global_mutex(|| -> Result<bool> {
-                                let temp_dir = utility_test_dir_gen()?;
+                                let temp_dir = utility_fixed_populated_tempdir_gen()?;
                                 std::env::set_current_dir(temp_dir.path())?;
 
                                 let mut before_state = utility_collect_directory_state(".")?;
@@ -990,7 +1056,7 @@ mod test {
                 #[quickcheck]
                 fn test_qc_no_change_if_no_matches(replacement: Option<String>, recurse: bool) -> TestResult {
                         let result = utility_with_global_mutex(|| -> Result<bool> {
-                                let temp_dir = utility_test_dir_gen()?;
+                                let temp_dir = utility_fixed_populated_tempdir_gen()?;
                                 std::env::set_current_dir(temp_dir.path())?;
 
                                 let mut before_state = utility_collect_directory_state(".")?;
