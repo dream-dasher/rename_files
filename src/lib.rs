@@ -187,7 +187,6 @@ mod test {
                 sync::{Mutex, OnceLock},
         };
 
-        use rand::seq::IndexedRandom;
         use tempfile::TempDir;
 
         use super::*;
@@ -269,69 +268,6 @@ mod test {
                 fs::create_dir(&dir_21)?;
                 fs::create_dir(&dir_211)?;
 
-                Ok(dir_root)
-        }
-
-        /// # Generates a populated temporary directory from a vector of paths.
-        ///
-        /// - Reporudcible: creates a rand seed from hash of vector for reproducibility
-        /// - QuickCheck compatible: `vec<Path>` will has a default generator
-        ///
-        fn utility_rand_from_vec_tempdir_gen(pathbufs: Vec<std::path::PathBuf>) -> Result<TempDir> {
-                use rand::rngs::StdRng;
-                use rand::{Rng, SeedableRng};
-                use std::collections::hash_map::DefaultHasher;
-                use std::hash::{Hash, Hasher};
-
-                // let hash = paths.hash();
-                // // convert hash to `u64`
-                // let hash_u64 = hash as u64;
-                // // create **rand** seed with `sead_from_u64`
-                // let seed = rand::SeedableRng::seed_from_u64(hash_u64);
-                // // choose number from 0..len -> numbers to right of that are files, left are dirs
-                // // child_dirs = 0, for each child dir, pop off and choose from 0..child_dirs, appending to said dir (0= parent)
-                // //for files, do the same thing, but no longer incrementing the child_dirs number
-
-                let dir_root = TempDir::new()?;
-                if pathbufs.is_empty() {
-                        return Ok(dir_root);
-                }
-
-                // hash for reproducibility
-                // while we'd get reproducibility from just, for example `paths.len() as u64`
-                // that would result in identical rand values for dirs of same number of elements
-                // creating less variability than we'd like
-                let mut rng_seeded = {
-                        let mut hasher = DefaultHasher::new();
-                        pathbufs.hash(&mut hasher);
-                        let hash = hasher.finish();
-                        StdRng::seed_from_u64(hash)
-                };
-
-                // Split pathbs vec into dir-pathbs and file-pathbs
-                let dirfile_splitpoint = rng_seeded.random_range(0..=pathbufs.len());
-                let (dir_pathbufs, file_pathbufs) = pathbufs.split_at(dirfile_splitpoint);
-                let mut joined_dirs = vec![dir_root.path().to_path_buf()];
-
-                // let dir_111 = dir_11.join("dir_111");
-                // fs::create_dir(&dir_1)?;
-                // fs::create_dir(&dir_11)?;
-                // fs::create_dir(&dir_111)?;
-                // File::create(dir_1.join("file_1a.txt"))?;
-
-                // child_dirs = 0, for each child dir, pop off and choose from 0..child_dirs, appending to said dir (0= parent)
-                // join dirs with random attachment points
-                for dir in dir_pathbufs {
-                        let entry = joined_dirs.choose(&mut rng_seeded).expect("vec guaranteed not empty");
-                        let joined_path = entry.join(dir);
-                        fs::create_dir(&joined_path)?;
-                        joined_dirs.push(joined_path);
-                }
-                for file in file_pathbufs {
-                        let entry = joined_dirs.choose(&mut rng_seeded).expect("vec guaranteed not empty");
-                        let joined_path = entry.join(file);
-                        File::create(&joined_path)?;
-                }
                 Ok(dir_root)
         }
 
@@ -706,7 +642,6 @@ mod test {
                         })
                 }
         }
-
         /// # Snapshot tests with `expect-test`
         ///
         ///
@@ -932,7 +867,7 @@ mod test {
         ///
         /// TODO: these are silly PoC
         #[cfg(test)]
-        pub mod tests_random_sample_property {
+        mod tests_random_sample_property {
                 use super::*;
                 use anyhow::{Result, anyhow};
                 use quickcheck::{Arbitrary, Gen, TestResult};
@@ -1085,3 +1020,122 @@ mod test {
                 }
         }
 }
+
+// #[cfg(test)]
+// mod test_test {
+
+//         use rand::seq::IndexedRandom;
+//         /// # broken: attempt to filter pathbugs not solving problems -- various issues like paths too long, encoding, and there's still some issue with what should be guaranteed to have a parent .. apparently not (despite testing directly prior)
+//         /// # Generates a populated temporary directory from a vector of paths.
+//         ///
+//         /// - Reporudcible: creates a rand seed from hash of vector for reproducibility
+//         /// - QuickCheck compatible: `vec<Path>` will has a default generator
+//         ///
+//         fn utility_rand_from_vec_tempdir_gen(pathbufs: Vec<std::path::PathBuf>) -> Result<TempDir> {
+//                 use rand::rngs::StdRng;
+//                 use rand::{Rng, SeedableRng};
+//                 use std::collections::hash_map::DefaultHasher;
+//                 use std::hash::{Hash, Hasher};
+
+//                 // let hash = paths.hash();
+//                 // // convert hash to `u64`
+//                 // let hash_u64 = hash as u64;
+//                 // // create **rand** seed with `sead_from_u64`
+//                 // let seed = rand::SeedableRng::seed_from_u64(hash_u64);
+//                 // // choose number from 0..len -> numbers to right of that are files, left are dirs
+//                 // // child_dirs = 0, for each child dir, pop off and choose from 0..child_dirs, appending to said dir (0= parent)
+//                 // //for files, do the same thing, but no longer incrementing the child_dirs number
+
+//                 let dir_root = TempDir::new()?;
+//                 if pathbufs.is_empty() {
+//                         return Ok(dir_root);
+//                 }
+//                 // clean empty, absolute, and non-standard ("symbolic") paths
+//                 let pathbufs: Vec<_> = pathbufs
+//                         .into_iter()
+//                         .filter_map(|p| {
+//                                 let cannonicalized = p.canonicalize().ok()?;
+//                                 let path_str = cannonicalized.to_string_lossy();
+
+//                                 // Filter out empty and dir paths
+//                                 if path_str.is_empty() || path_str.ends_with('/') {
+//                                         None
+//                                 } else {
+//                                         Some(cannonicalized)
+//                                 }
+//                         })
+//                         .collect();
+//                 tracing::error!("Filtered paths: {:?}", pathbufs);
+
+//                 // hash for reproducibility
+//                 // while we'd get reproducibility from just, for example `paths.len() as u64`
+//                 // that would result in identical rand values for dirs of same number of elements
+//                 // creating less variability than we'd like
+//                 let mut rng_seeded = {
+//                         let mut hasher = DefaultHasher::new();
+//                         pathbufs.hash(&mut hasher);
+//                         let hash = hasher.finish();
+//                         StdRng::seed_from_u64(hash)
+//                 };
+
+//                 // Split pathbs vec into dir-pathbs and file-pathbs
+//                 let dirfile_splitpoint = rng_seeded.random_range(0..=pathbufs.len());
+//                 let (dir_pathbufs, file_pathbufs) = pathbufs.split_at(dirfile_splitpoint);
+//                 let mut joined_dirs = vec![dir_root.path().to_path_buf()]; // guaranteed to include root
+
+//                 // let dir_111 = dir_11.join("dir_111");
+//                 // fs::create_dir(&dir_1)?;
+//                 // fs::create_dir(&dir_11)?;
+//                 // fs::create_dir(&dir_111)?;
+//                 // File::create(dir_1.join("file_1a.txt"))?;
+
+//                 // child_dirs = 0, for each child dir, pop off and choose from 0..child_dirs, appending to said dir (0= parent)
+//                 // join dirs with random attachment points
+//                 for dir in dir_pathbufs {
+//                         let entry = joined_dirs
+//                                 .choose(&mut rng_seeded)
+//                                 .expect("joined_dirs guaranteed not empty");
+//                         let joined_path = entry.join(dir);
+//                         // perf: `_all` doesn't seem needed for dir creation here, but docs suggest it is -- keeping this despite repeated mkdir calls as of 1.88
+//                         fs::create_dir_all(&joined_path)?;
+//                         joined_dirs.push(joined_path);
+//                 }
+//                 for file in file_pathbufs {
+//                         let entry = joined_dirs
+//                                 .choose(&mut rng_seeded)
+//                                 .expect("joined_dirs guaranteed not empty");
+//                         let joined_path = entry.join(file);
+//                         if entry.parent().is_some() {
+//                                 // quandry: `_all` does seem needed for dir creation here...
+//                                 fs::create_dir_all(joined_path.parent().expect("guaranteed to exist"))?;
+//                         }
+//                         tracing::info!("Creating file: {}", joined_path.display());
+//                         File::create(&joined_path)?;
+//                 }
+//                 Ok(dir_root)
+//         }
+//         use super::*;
+//         use anyhow::Result;
+//         use quickcheck_macros::quickcheck;
+//         use test_log::test;
+//         #[test]
+//         fn test_rand_gen() -> Result<()> {
+//                 let test_paths = vec![
+//                         std::path::PathBuf::from("test_file1.txt"),
+//                         std::path::PathBuf::from("subdir/test_file2.txt"),
+//                         std::path::PathBuf::from("another_dir"),
+//                         std::path::PathBuf::from("deep/nested/path/file.rs"),
+//                 ];
+//                 let _x = utility_rand_from_vec_tempdir_gen(test_paths)?;
+
+//                 Ok(())
+//         }
+
+//         #[test]
+//         #[quickcheck]
+//         fn test_qc_rand_gen(pathbufs: Vec<std::path::PathBuf>) -> Result<()> {
+//                 let _x = utility_rand_from_vec_tempdir_gen(pathbufs)?;
+
+//                 Ok(())
+//         }
+// }
