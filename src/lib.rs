@@ -866,156 +866,159 @@ mod test {
                 //         Ok(())
                 // }
         }
+
+        /// # "Property Test" using random sampling with QuickCheck
+        #[cfg(test)]
+        pub mod tests_random_sample_property {
+                use super::*;
+                use quickcheck::{Arbitrary, Gen, TestResult};
+                use quickcheck_macros::quickcheck;
+                use test_log::test;
+
+                /// Custom generator for known-good regex strings
+                #[derive(Debug, Clone)]
+                struct SampleValidPreRegex(String);
+
+                impl Arbitrary for SampleValidPreRegex {
+                        fn arbitrary(g: &mut Gen) -> Self {
+                                let patterns = [
+                                        "file.*",
+                                        r"\d+",
+                                        "[a-z]+",
+                                        ".*\\.txt",
+                                        "(test|spec)",
+                                        "[A-Za-z_][A-Za-z0-9_]*",
+                                ];
+                                let idx = usize::arbitrary(g) % patterns.len();
+                                SampleValidPreRegex(patterns[idx].to_string())
+                        }
+                }
+
+                /// Test that preview=true never changes filesystem regardless of other args
+                #[quickcheck]
+                fn test_qc_no_change_if_preview(
+                        regex: SampleValidPreRegex,
+                        replacement: Option<String>,
+                        recurse: bool,
+                ) -> TestResult {
+                        let result = utility_with_global_mutex(|| -> Result<bool> {
+                                let temp_dir = utility_test_dir_gen()?;
+                                std::env::set_current_dir(temp_dir.path())?;
+
+                                let mut before_state = utility_collect_directory_state(".")?;
+
+                                let args = Args {
+                                        regex: regex.0,
+                                        replacement,
+                                        recurse,
+                                        preview: true, // This should prevent all changes
+                                };
+
+                                let _ = app(&args); // Ignore result, just check filesystem state
+
+                                let mut after_state = utility_collect_directory_state(".")?;
+
+                                before_state.sort();
+                                after_state.sort();
+
+                                Ok(before_state == after_state)
+                        });
+
+                        match result {
+                                Ok(unchanged) => TestResult::from_bool(unchanged),
+                                Err(_) => TestResult::discard(), // Discard invalid test cases
+                        }
+                }
+
+                /// Test that replacement=None never changes filesystem
+                #[quickcheck]
+                fn test_qc_no_change_if_norep(regex: SampleValidPreRegex, recurse: bool) -> TestResult {
+                        let result = utility_with_global_mutex(|| -> Result<bool> {
+                                let temp_dir = utility_test_dir_gen()?;
+                                std::env::set_current_dir(temp_dir.path())?;
+
+                                let mut before_state = utility_collect_directory_state(".")?;
+
+                                let args = Args {
+                                        regex: regex.0,
+                                        replacement: None, // This should prevent all changes
+                                        recurse,
+                                        preview: false,
+                                };
+
+                                let _ = app(&args); // Ignore result, just check filesystem state
+
+                                let mut after_state = utility_collect_directory_state(".")?;
+
+                                before_state.sort();
+                                after_state.sort();
+
+                                Ok(before_state == after_state)
+                        });
+
+                        match result {
+                                Ok(unchanged) => TestResult::from_bool(unchanged),
+                                Err(_) => TestResult::discard(),
+                        }
+                }
+
+                /// Test replacement behavior using built-in PathBuf generator
+                #[quickcheck]
+                fn test_qc_replacement_uses_real_filenames(
+                        path: std::path::PathBuf,
+                        regex: SampleValidPreRegex,
+                        replacement: String,
+                ) -> TestResult {
+                        use regex::Regex;
+
+                        // Extract filename from generated path
+                        let filename = match path.file_name().and_then(|n| n.to_str()) {
+                                Some(f) if !f.is_empty() => f,
+                                _ => return TestResult::discard(),
+                        };
+
+                        let re = match Regex::new(&regex.0) {
+                                Ok(re) => re,
+                                Err(_) => return TestResult::discard(),
+                        };
+
+                        // Test that the same input produces the same output (determinism)
+                        let result1 = re.replace(filename, &replacement);
+                        let result2 = re.replace(filename, &replacement);
+
+                        TestResult::from_bool(result1 == result2)
+                }
+
+                /// Test no changes when regex doesn't match anything
+                #[quickcheck]
+                fn test_qc_no_change_if_no_matches(replacement: Option<String>, recurse: bool) -> TestResult {
+                        let result = utility_with_global_mutex(|| -> Result<bool> {
+                                let temp_dir = utility_test_dir_gen()?;
+                                std::env::set_current_dir(temp_dir.path())?;
+
+                                let mut before_state = utility_collect_directory_state(".")?;
+
+                                let args = Args {
+                                        regex: "definitely_wont_match_anything_xyz123".to_string(),
+                                        replacement,
+                                        recurse,
+                                        preview: false,
+                                };
+
+                                let _ = app(&args); // Ignore result, just check filesystem state
+
+                                let mut after_state = utility_collect_directory_state(".")?;
+
+                                before_state.sort();
+                                after_state.sort();
+
+                                Ok(before_state == after_state)
+                        });
+
+                        match result {
+                                Ok(unchanged) => TestResult::from_bool(unchanged),
+                                Err(_) => TestResult::discard(),
+                        }
+                }
+        }
 }
-
-// #[cfg(test)]
-// pub mod tests_random_sample {
-//         use quickcheck::{Arbitrary, Gen, TestResult};
-//         use quickcheck_macros::quickcheck;
-//         use test_log::test;
-
-//         use super::*;
-//         use crate::test_pub_utilities::{
-//                 utility_collect_directory_state, utility_test_dir_gen, utility_with_global_mutex,
-//         };
-
-//         /// Custom generator for known-good regex strings
-//         #[derive(Debug, Clone)]
-//         struct ValidRegexString(String);
-
-//         impl Arbitrary for ValidRegexString {
-//                 fn arbitrary(g: &mut Gen) -> Self {
-//                         let patterns =
-//                                 ["file.*", r"\d+", "[a-z]+", ".*\\.txt", "(test|spec)", "[A-Za-z_][A-Za-z0-9_]*"];
-//                         let idx = usize::arbitrary(g) % patterns.len();
-//                         ValidRegexString(patterns[idx].to_string())
-//                 }
-//         }
-
-//         /// Test that preview=true never changes filesystem regardless of other args
-//         #[quickcheck]
-//         fn test_qc_preview_never_changes_filesystem(
-//                 regex: ValidRegexString,
-//                 replacement: Option<String>,
-//                 recurse: bool,
-//         ) -> TestResult {
-//                 let result = utility_with_global_mutex(|| -> Result<bool> {
-//                         let temp_dir = utility_test_dir_gen()?;
-//                         std::env::set_current_dir(temp_dir.path())?;
-
-//                         let mut before_state = utility_collect_directory_state(".")?;
-
-//                         let args = Args {
-//                                 regex: regex.0,
-//                                 replacement,
-//                                 recurse,
-//                                 preview: true, // This should prevent all changes
-//                         };
-
-//                         let _ = app(&args); // Ignore result, just check filesystem state
-
-//                         let mut after_state = utility_collect_directory_state(".")?;
-
-//                         before_state.sort();
-//                         after_state.sort();
-
-//                         Ok(before_state == after_state)
-//                 });
-
-//                 match result {
-//                         Ok(unchanged) => TestResult::from_bool(unchanged),
-//                         Err(_) => TestResult::discard(), // Discard invalid test cases
-//                 }
-//         }
-
-//         /// Test that replacement=None never changes filesystem
-//         #[quickcheck]
-//         fn test_qc_no_change_if_norep(regex: ValidRegexString, recurse: bool) -> TestResult {
-//                 let result = utility_with_global_mutex(|| -> Result<bool> {
-//                         let temp_dir = utility_test_dir_gen()?;
-//                         std::env::set_current_dir(temp_dir.path())?;
-
-//                         let mut before_state = utility_collect_directory_state(".")?;
-
-//                         let args = Args {
-//                                 regex: regex.0,
-//                                 replacement: None, // This should prevent all changes
-//                                 recurse,
-//                                 preview: false,
-//                         };
-
-//                         let _ = app(&args); // Ignore result, just check filesystem state
-
-//                         let mut after_state = utility_collect_directory_state(".")?;
-
-//                         before_state.sort();
-//                         after_state.sort();
-
-//                         Ok(before_state == after_state)
-//                 });
-
-//                 match result {
-//                         Ok(unchanged) => TestResult::from_bool(unchanged),
-//                         Err(_) => TestResult::discard(),
-//                 }
-//         }
-
-//         /// Test replacement behavior using built-in PathBuf generator
-//         #[quickcheck]
-//         fn test_qc_replacement_uses_real_filenames(
-//                 path: std::path::PathBuf,
-//                 regex: ValidRegexString,
-//                 replacement: String,
-//         ) -> TestResult {
-//                 use regex::Regex;
-
-//                 // Extract filename from generated path
-//                 let filename = match path.file_name().and_then(|n| n.to_str()) {
-//                         Some(f) if !f.is_empty() => f,
-//                         _ => return TestResult::discard(),
-//                 };
-
-//                 let re = match Regex::new(&regex.0) {
-//                         Ok(re) => re,
-//                         Err(_) => return TestResult::discard(),
-//                 };
-
-//                 // Test that the same input produces the same output (determinism)
-//                 let result1 = re.replace(filename, &replacement);
-//                 let result2 = re.replace(filename, &replacement);
-
-//                 TestResult::from_bool(result1 == result2)
-//         }
-
-//         /// Test no changes when regex doesn't match anything
-//         #[quickcheck]
-//         fn test_qc_no_change_if_no_matches(replacement: Option<String>, recurse: bool) -> TestResult {
-//                 let result = utility_with_global_mutex(|| -> Result<bool> {
-//                         let temp_dir = utility_test_dir_gen()?;
-//                         std::env::set_current_dir(temp_dir.path())?;
-
-//                         let mut before_state = utility_collect_directory_state(".")?;
-
-//                         let args = Args {
-//                                 regex: "definitely_wont_match_anything_xyz123".to_string(),
-//                                 replacement,
-//                                 recurse,
-//                                 preview: false,
-//                         };
-
-//                         let _ = app(&args); // Ignore result, just check filesystem state
-
-//                         let mut after_state = utility_collect_directory_state(".")?;
-
-//                         before_state.sort();
-//                         after_state.sort();
-
-//                         Ok(before_state == after_state)
-//                 });
-
-//                 match result {
-//                         Ok(unchanged) => TestResult::from_bool(unchanged),
-//                         Err(_) => TestResult::discard(),
-//                 }
-//         }
-// }
