@@ -170,11 +170,21 @@ fn walkdir_build_with_depths(does_recurse: bool) -> WalkDir {
         }
 }
 
-/// /////////////////////////////////////////////////////////////////////////////////////// //
-/// /////////////                 TESTS - lib.rs                             ////////////// //
-/// /////////////////////////////////////////////////////////////////////////////////////// //
+// /////////////////////////////////////////////////////////////////////////////////////// //
+// /////////////////////////////////////////////////////////////////////////////////////// //
+// /////////////                 TESTS - lib.rs                             ////////////// //
+// /////////////////////////////////////////////////////////////////////////////////////// //
+// /////////////////////////////////////////////////////////////////////////////////////// //
+
+/// # Tests
+///
+/// ## Special Note on Working Directory & Threads
+/// The 'working directory' is a global state within a process.  (This is an issue baked into the design of all the major OSes.)
+/// This means that working directory manipulation and reading within tests is *NOT* thread-safe.
+///
+/// To work around this we have the utility `utility_with_global_mutex`, which can take a closure and execute only when mutex guard is held.
 #[cfg(test)]
-pub mod test_pub_utilities {
+mod test {
         use std::{
                 fs::{self, File},
                 sync::{Mutex, OnceLock},
@@ -199,7 +209,7 @@ pub mod test_pub_utilities {
         /// or using `cargo nextest`, which process separate tests).  The intrinsic global (mutable)
         /// resource character of the working directory should be called out (and ideally dealt with)
         ///  in the region of the code that has to work with it.
-        pub fn utility_with_global_mutex<F, R>(f: F) -> R
+        fn utility_with_global_mutex<F, R>(f: F) -> R
         where
                 F: FnOnce() -> R,
         {
@@ -238,7 +248,7 @@ pub mod test_pub_utilities {
         ///   - root/dir_2/dir_21/
         ///   - root/dir_2/dir_21/dir_211/
         /// ```
-        pub fn utility_test_dir_gen() -> Result<TempDir> {
+        fn utility_test_dir_gen() -> Result<TempDir> {
                 let dir_root = TempDir::new()?;
                 File::create(dir_root.path().join("file_0a.txt"))?;
                 File::create(dir_root.path().join("file_0b.txt"))?;
@@ -265,436 +275,438 @@ pub mod test_pub_utilities {
         }
 
         /// Utility function to collect directory state for comparison
-        pub fn utility_collect_directory_state(path: &str) -> Result<Vec<std::path::PathBuf>> {
+        fn utility_collect_directory_state(path: &str) -> Result<Vec<std::path::PathBuf>> {
                 let mut entries = Vec::new();
                 for entry in WalkDir::new(path).contents_first(true) {
                         entries.push(entry?.path().to_path_buf());
                 }
                 Ok(entries)
         }
-}
 
-#[cfg(test)]
-pub mod tests_manual {
+        /// Manual, hardcoded "spot" tests (classic tests)
+        #[cfg(test)]
+        mod tests_manual {
 
-        use test_log::test;
+                use super::*;
+                use anyhow::Result;
+                use anyhow::anyhow;
+                use test_log::test;
 
-        use super::*;
-        use crate::test_pub_utilities::{
-                utility_collect_directory_state, utility_test_dir_gen, utility_with_global_mutex,
-        };
-        use anyhow::Result;
-        use anyhow::anyhow;
-
-        // Test the app() function
-        // Test the core_process_loop() function
-
-        /// Test the check_for_common_syntax_error() function
-        #[test]
-        fn test_check_for_common_syntax_error() {
-                let test_cases = vec![
-                        ("$1abc", true),
-                        ("${1}abc", false),
-                        //
-                        ("$1a", true),
-                        ("${1}a", false),
-                        //
-                        ("$1", false),
-                        ("${1}", false),
-                        //
-                        ("$1 ", false),
-                        ("${1} ", false),
-                        //
-                        ("${1} abc ", false),
-                        ("$1 abc ", false),
-                        //
-                        ("$1abc$2", true),
-                        ("${1}abc$2", false),
-                        //
-                        ("$1abc$2def", true),
-                        ("${1}abc$2def", true),
-                        ("$1abc${2}def", true),
-                        ("${1}abc${2}def", false),
-                        //
-                        ("${1} $2", false),
-                        ("$1$2 ", false),
-                ];
-                for (input, expect_error) in test_cases {
-                        let result = check_for_common_syntax_error(input);
-                        match (result.is_err(), expect_error) {
-                                (true, true) => continue,
-                                (false, false) => continue,
-                                (true, false) => panic!("Expected no error for input: {}", input),
-                                (false, true) => panic!("Expected an error for input: {}", input),
+                /// Test the check_for_common_syntax_error() function
+                #[test]
+                fn test_check_for_common_syntax_error() {
+                        let test_cases = vec![
+                                ("$1abc", true),
+                                ("${1}abc", false),
+                                //
+                                ("$1a", true),
+                                ("${1}a", false),
+                                //
+                                ("$1", false),
+                                ("${1}", false),
+                                //
+                                ("$1 ", false),
+                                ("${1} ", false),
+                                //
+                                ("${1} abc ", false),
+                                ("$1 abc ", false),
+                                //
+                                ("$1abc$2", true),
+                                ("${1}abc$2", false),
+                                //
+                                ("$1abc$2def", true),
+                                ("${1}abc$2def", true),
+                                ("$1abc${2}def", true),
+                                ("${1}abc${2}def", false),
+                                //
+                                ("${1} $2", false),
+                                ("$1$2 ", false),
+                        ];
+                        for (input, expect_error) in test_cases {
+                                let result = check_for_common_syntax_error(input);
+                                match (result.is_err(), expect_error) {
+                                        (true, true) => continue,
+                                        (false, false) => continue,
+                                        (true, false) => panic!("Expected no error for input: {}", input),
+                                        (false, true) => panic!("Expected an error for input: {}", input),
+                                }
                         }
+                }
+
+                /// Flat, iterative change of file names.
+                ///
+                /// # Warning:
+                /// This test manipulates the working directory manipulation (which is a process-wide global state).
+                /// Code execution is controlled by a global mutex to make this function thread-safe.
+                #[test]
+                fn test_app_with_norecursion() -> Result<()> {
+                        utility_with_global_mutex(|| {
+                                let temp_dir = utility_test_dir_gen()?;
+                                std::env::set_current_dir(temp_dir.path())?;
+
+                                // run fresh
+                                let args = Args {
+                                        regex: "(file_.*)".to_string(),
+                                        replacement: Some("changed-${1}".to_string()),
+                                        recurse: false,
+                                        preview: false,
+                                };
+                                app(&args)?;
+                                println!("temp: {:?}", temp_dir);
+
+                                assert!(temp_dir.path().join("changed-file_0a.txt").exists());
+                                assert!(temp_dir.path().join("changed-file_0b.txt").exists());
+                                assert!(temp_dir.path().join("changed-file_0c.txt").exists());
+
+                                // run on changed
+                                let args = Args {
+                                        regex: "(file_.*)".to_string(),
+                                        replacement: Some("changed-${1}".to_string()),
+                                        recurse: false,
+                                        preview: false,
+                                };
+                                app(&args)?;
+                                println!("temp: {:?}", temp_dir);
+
+                                assert!(temp_dir.path().join("changed-changed-file_0a.txt").exists());
+                                assert!(temp_dir.path().join("changed-changed-file_0b.txt").exists());
+                                assert!(temp_dir.path().join("changed-changed-file_0c.txt").exists());
+
+                                Ok(())
+                        })
+                }
+
+                /// Recursive, iterative change of file and directory names.
+                ///
+                /// # Warning:
+                /// This test manipulates the working directory manipulation (which is a process-wide global state).
+                /// Code execution is controlled by a global mutex to make this function thread-safe.
+                #[test]
+                fn test_app_with_yesrecursion() -> Result<()> {
+                        utility_with_global_mutex(|| {
+                                let temp_dir = utility_test_dir_gen()?;
+                                std::env::set_current_dir(temp_dir.path())?;
+
+                                // run fresh
+                                let args = Args {
+                                        regex: "(file.*)".to_string(),
+                                        replacement: Some("changed-${1}".to_string()),
+                                        recurse: true,
+                                        preview: false,
+                                };
+                                app(&args)?;
+                                println!("temp: {:?}", temp_dir);
+
+                                assert!(temp_dir.path().join("changed-file_0a.txt").exists());
+                                assert!(temp_dir.path().join("changed-file_0b.txt").exists());
+                                assert!(temp_dir.path().join("changed-file_0c.txt").exists());
+
+                                assert!(temp_dir.path().join("changed-file_0c.txt").exists());
+                                assert!(temp_dir.path().join("changed-file_0c.txt").exists());
+                                assert!(temp_dir.path().join("dir_1").join("changed-file_1a.txt").exists());
+                                assert!(temp_dir
+                                        .path()
+                                        .join("dir_1")
+                                        .join("dir_11")
+                                        .join("changed-file_11a.txt")
+                                        .exists());
+                                assert!(temp_dir
+                                        .path()
+                                        .join("dir_1")
+                                        .join("dir_11")
+                                        .join("dir_111")
+                                        .join("changed-file_111a.txt")
+                                        .exists());
+
+                                // run against dirs
+                                let args = Args {
+                                        regex: "(dir.*)".to_string(),
+                                        replacement: Some("changed-${1}".to_string()),
+                                        recurse: true,
+                                        preview: false,
+                                };
+                                app(&args)?;
+                                println!("temp: {:?}", temp_dir);
+
+                                assert!(temp_dir.path().join("changed-file_0a.txt").exists());
+                                assert!(temp_dir.path().join("changed-file_0b.txt").exists());
+                                assert!(temp_dir.path().join("changed-file_0c.txt").exists());
+
+                                assert!(temp_dir.path().join("changed-file_0c.txt").exists());
+                                assert!(temp_dir.path().join("changed-file_0c.txt").exists());
+                                assert!(temp_dir
+                                        .path()
+                                        .join("changed-dir_1")
+                                        .join("changed-file_1a.txt")
+                                        .exists());
+                                assert!(temp_dir
+                                        .path()
+                                        .join("changed-dir_1")
+                                        .join("changed-dir_11")
+                                        .join("changed-file_11a.txt")
+                                        .exists());
+                                assert!(temp_dir
+                                        .path()
+                                        .join("changed-dir_1")
+                                        .join("changed-dir_11")
+                                        .join("changed-dir_111")
+                                        .join("changed-file_111a.txt")
+                                        .exists());
+
+                                // run against both
+                                let args = Args {
+                                        regex: r"(\d+)".to_string(),
+                                        replacement: Some("d${1}".to_string()),
+                                        recurse: true,
+                                        preview: false,
+                                };
+                                app(&args)?;
+                                println!("temp: {:?}", temp_dir);
+
+                                assert!(temp_dir.path().join("changed-file_d0a.txt").exists());
+                                assert!(temp_dir.path().join("changed-file_d0b.txt").exists());
+                                assert!(temp_dir.path().join("changed-file_d0c.txt").exists());
+
+                                assert!(temp_dir.path().join("changed-file_d0c.txt").exists());
+                                assert!(temp_dir.path().join("changed-file_d0c.txt").exists());
+                                assert!(temp_dir
+                                        .path()
+                                        .join("changed-dir_d1")
+                                        .join("changed-file_d1a.txt")
+                                        .exists());
+                                assert!(temp_dir
+                                        .path()
+                                        .join("changed-dir_d1")
+                                        .join("changed-dir_d11")
+                                        .join("changed-file_d11a.txt")
+                                        .exists());
+                                assert!(temp_dir
+                                        .path()
+                                        .join("changed-dir_d1")
+                                        .join("changed-dir_d11")
+                                        .join("changed-dir_d111")
+                                        .join("changed-file_d111a.txt")
+                                        .exists());
+
+                                Ok(())
+                        })
+                }
+
+                /// Files are only renamed if preview=false AND replacement=Some AND regex has a match. (i.e. if any of true, None, or no-match occurs then no changes should occur)
+                /// We take a a base set of args, validate that they would cause a change, and then apply each
+                /// case that should be change blocking, alone, to that base set and verify that no change occurred.
+                ///
+                /// # Warning:
+                /// This test manipulates the working directory manipulation (which is a process-wide global state).
+                /// Code execution is controlled by a global mutex to make this function thread-safe.
+                #[test]
+                fn test_no_change_if_preview_or_norep_or_nomatch() -> Result<()> {
+                        utility_with_global_mutex(|| {
+                                // base config that *should* result in changes
+                                let base_args = Args {
+                                        regex: "(file_.*)".to_string(),
+                                        replacement: Some("changed-${1}".to_string()),
+                                        recurse: true,
+                                        preview: false,
+                                };
+
+                                // test 0, preamble: verify that base config *does* cause changes to files/dirs
+                                {
+                                        let temp_dir = utility_test_dir_gen()?;
+                                        std::env::set_current_dir(temp_dir.path())?;
+
+                                        let mut directory_before_state = utility_collect_directory_state(".")?;
+                                        app(&base_args)?;
+                                        let mut directory_after_state = utility_collect_directory_state(".")?;
+
+                                        directory_before_state.sort();
+                                        directory_after_state.sort();
+
+                                        if directory_before_state == directory_after_state {
+                                                tracing::error!(
+                                                        "PREAMBLE TEST FAILED: base_args should have caused changes but didn't"
+                                                );
+                                                return Err(anyhow!("Base_args should cause changes but didn't"));
+                                        }
+                                }
+
+                                // test 1+, main: verify that various states prevent changes to files/dirs
+                                let nochange_test_cases = [
+                                        ("preview_true", Args { preview: true, ..base_args.clone() }),
+                                        ("replacement_none", Args { replacement: None, ..base_args.clone() }),
+                                        (
+                                                "no_matches",
+                                                Args {
+                                                        regex: "no_match_pattern_xyz".to_string(),
+                                                        replacement: Some("should_not_be_used".to_string()),
+                                                        ..base_args.clone()
+                                                },
+                                        ),
+                                ];
+
+                                for (test_name, args) in nochange_test_cases {
+                                        let temp_dir = utility_test_dir_gen()?;
+                                        std::env::set_current_dir(temp_dir.path())?;
+
+                                        let mut directory_before_state = utility_collect_directory_state(".")?;
+                                        app(&args)?;
+                                        let mut directory_after_state = utility_collect_directory_state(".")?;
+
+                                        directory_before_state.sort();
+                                        directory_after_state.sort();
+
+                                        if directory_before_state != directory_after_state {
+                                                tracing::error!(
+                                                        "NO-CHANGE TEST FAILED: \"{}\" should not have changed directory state, but did",
+                                                        test_name
+                                                );
+                                                return Err(anyhow!(
+                                                        "No-Change test \"{}\" should have resulted in changed directory state, but did",
+                                                        test_name
+                                                ));
+                                        }
+                                }
+
+                                Ok(())
+                        })
+                }
+
+                /// Test invariant: invalid regex should fail early with no directory changes
+                ///
+                /// This is separate from the main 3 prerequisites (preview=false AND replacement=Some AND regex has a match).
+                /// Invalid regex should fail during regex compilation before any filesystem operations occur.
+                ///
+                /// # Warning:
+                /// This test manipulates the working directory manipulation (which is a process-wide global state).
+                /// Code execution is controlled by a global mutex to make this function thread-safe.
+                #[test]
+                fn test_no_changes_if_invalid_regex() -> Result<()> {
+                        utility_with_global_mutex(|| {
+                                // base config that *should* result in changes
+                                let base_args = Args {
+                                        regex: "(file_.*)".to_string(),
+                                        replacement: Some("changed-${1}".to_string()),
+                                        recurse: true,
+                                        preview: false,
+                                };
+
+                                // test 0, preamble: verify that base config *does* cause changes to files/dirs
+                                {
+                                        let temp_dir = utility_test_dir_gen()?;
+                                        std::env::set_current_dir(temp_dir.path())?;
+
+                                        let mut directory_before_state = utility_collect_directory_state(".")?;
+                                        app(&base_args)?;
+                                        let mut directory_after_state = utility_collect_directory_state(".")?;
+
+                                        directory_before_state.sort();
+                                        directory_after_state.sort();
+
+                                        if directory_before_state == directory_after_state {
+                                                tracing::error!(
+                                                        "PREAMBLE TEST FAILED: base_args should have caused changes but didn't"
+                                                );
+                                                return Err(anyhow!("Base_args should cause changes but didn't"));
+                                        }
+                                }
+
+                                let temp_dir = utility_test_dir_gen()?;
+                                std::env::set_current_dir(temp_dir.path())?;
+
+                                let mut directory_before_state = utility_collect_directory_state(".")?;
+
+                                // contains invalid regex (should fail and not modify filesystem)
+                                let invalidregex_args = Args {
+                                        regex: "[invalid_regex".to_string(), // Missing closing bracket
+                                        ..base_args.clone()
+                                };
+
+                                let result = app(&invalidregex_args);
+                                assert!(result.is_err(), "Invalid regex should result in error");
+
+                                // check error returned
+                                let error_string = format!("{}", result.unwrap_err());
+                                assert!(
+                                        error_string.contains("regex") || error_string.contains("parse"),
+                                        "Error should mention regex parsing: {}",
+                                        error_string
+                                );
+
+                                let mut directory_after_state = utility_collect_directory_state(".")?;
+
+                                // check no changes
+                                directory_before_state.sort();
+                                directory_after_state.sort();
+                                assert_eq!(
+                                        directory_before_state, directory_after_state,
+                                        "Directory state should be unchanged when regex is invalid"
+                                );
+                                Ok(())
+                        })
                 }
         }
 
-        /// Flat, iterative change of file names.
+        /// # Snapshot tests with `expect-test`
         ///
-        /// # Warning:
-        /// This test manipulates the working directory manipulation (which is a process-wide global state).
-        /// Code execution is controlled by a global mutex to make this function thread-safe.
-        #[test]
-        fn test_app_with_norecursion() -> Result<()> {
-                utility_with_global_mutex(|| {
-                        let temp_dir = utility_test_dir_gen()?;
-                        std::env::set_current_dir(temp_dir.path())?;
-
-                        // run fresh
-                        let args = Args {
-                                regex: "(file_.*)".to_string(),
-                                replacement: Some("changed-${1}".to_string()),
-                                recurse: false,
-                                preview: false,
-                        };
-                        app(&args)?;
-                        println!("temp: {:?}", temp_dir);
-
-                        assert!(temp_dir.path().join("changed-file_0a.txt").exists());
-                        assert!(temp_dir.path().join("changed-file_0b.txt").exists());
-                        assert!(temp_dir.path().join("changed-file_0c.txt").exists());
-
-                        // run on changed
-                        let args = Args {
-                                regex: "(file_.*)".to_string(),
-                                replacement: Some("changed-${1}".to_string()),
-                                recurse: false,
-                                preview: false,
-                        };
-                        app(&args)?;
-                        println!("temp: {:?}", temp_dir);
-
-                        assert!(temp_dir.path().join("changed-changed-file_0a.txt").exists());
-                        assert!(temp_dir.path().join("changed-changed-file_0b.txt").exists());
-                        assert!(temp_dir.path().join("changed-changed-file_0c.txt").exists());
-
-                        Ok(())
-                })
-        }
-
-        /// Recursive, iterative change of file and directory names.
         ///
-        /// # Warning:
-        /// This test manipulates the working directory manipulation (which is a process-wide global state).
-        /// Code execution is controlled by a global mutex to make this function thread-safe.
-        #[test]
-        fn test_app_with_yesrecursion() -> Result<()> {
-                utility_with_global_mutex(|| {
-                        let temp_dir = utility_test_dir_gen()?;
-                        std::env::set_current_dir(temp_dir.path())?;
-
-                        // run fresh
-                        let args = Args {
-                                regex: "(file.*)".to_string(),
-                                replacement: Some("changed-${1}".to_string()),
-                                recurse: true,
-                                preview: false,
-                        };
-                        app(&args)?;
-                        println!("temp: {:?}", temp_dir);
-
-                        assert!(temp_dir.path().join("changed-file_0a.txt").exists());
-                        assert!(temp_dir.path().join("changed-file_0b.txt").exists());
-                        assert!(temp_dir.path().join("changed-file_0c.txt").exists());
-
-                        assert!(temp_dir.path().join("changed-file_0c.txt").exists());
-                        assert!(temp_dir.path().join("changed-file_0c.txt").exists());
-                        assert!(temp_dir.path().join("dir_1").join("changed-file_1a.txt").exists());
-                        assert!(temp_dir
-                                .path()
-                                .join("dir_1")
-                                .join("dir_11")
-                                .join("changed-file_11a.txt")
-                                .exists());
-                        assert!(temp_dir
-                                .path()
-                                .join("dir_1")
-                                .join("dir_11")
-                                .join("dir_111")
-                                .join("changed-file_111a.txt")
-                                .exists());
-
-                        // run against dirs
-                        let args = Args {
-                                regex: "(dir.*)".to_string(),
-                                replacement: Some("changed-${1}".to_string()),
-                                recurse: true,
-                                preview: false,
-                        };
-                        app(&args)?;
-                        println!("temp: {:?}", temp_dir);
-
-                        assert!(temp_dir.path().join("changed-file_0a.txt").exists());
-                        assert!(temp_dir.path().join("changed-file_0b.txt").exists());
-                        assert!(temp_dir.path().join("changed-file_0c.txt").exists());
-
-                        assert!(temp_dir.path().join("changed-file_0c.txt").exists());
-                        assert!(temp_dir.path().join("changed-file_0c.txt").exists());
-                        assert!(temp_dir
-                                .path()
-                                .join("changed-dir_1")
-                                .join("changed-file_1a.txt")
-                                .exists());
-                        assert!(temp_dir
-                                .path()
-                                .join("changed-dir_1")
-                                .join("changed-dir_11")
-                                .join("changed-file_11a.txt")
-                                .exists());
-                        assert!(temp_dir
-                                .path()
-                                .join("changed-dir_1")
-                                .join("changed-dir_11")
-                                .join("changed-dir_111")
-                                .join("changed-file_111a.txt")
-                                .exists());
-
-                        // run against both
-                        let args = Args {
-                                regex: r"(\d+)".to_string(),
-                                replacement: Some("d${1}".to_string()),
-                                recurse: true,
-                                preview: false,
-                        };
-                        app(&args)?;
-                        println!("temp: {:?}", temp_dir);
-
-                        assert!(temp_dir.path().join("changed-file_d0a.txt").exists());
-                        assert!(temp_dir.path().join("changed-file_d0b.txt").exists());
-                        assert!(temp_dir.path().join("changed-file_d0c.txt").exists());
-
-                        assert!(temp_dir.path().join("changed-file_d0c.txt").exists());
-                        assert!(temp_dir.path().join("changed-file_d0c.txt").exists());
-                        assert!(temp_dir
-                                .path()
-                                .join("changed-dir_d1")
-                                .join("changed-file_d1a.txt")
-                                .exists());
-                        assert!(temp_dir
-                                .path()
-                                .join("changed-dir_d1")
-                                .join("changed-dir_d11")
-                                .join("changed-file_d11a.txt")
-                                .exists());
-                        assert!(temp_dir
-                                .path()
-                                .join("changed-dir_d1")
-                                .join("changed-dir_d11")
-                                .join("changed-dir_d111")
-                                .join("changed-file_d111a.txt")
-                                .exists());
-
-                        Ok(())
-                })
-        }
-
-        /// Files are only renamed if preview=false AND replacement=Some AND regex has a match. (i.e. if any of true, None, or no-match occurs then no changes should occur)
-        /// We take a a base set of args, validate that they would cause a change, and then apply each
-        /// case that should be change blocking, alone, to that base set and verify that no change occurred.
+        /// ## Control
+        /// 1. env-var controlling expect-test (snapshot lib) behavior: `UPDATE_EXPECT=1`
+        /// 2. use *rust-analyzer* lsp **action** to run individual test with update
         ///
-        /// # Warning:
-        /// This test manipulates the working directory manipulation (which is a process-wide global state).
-        /// Code execution is controlled by a global mutex to make this function thread-safe.
-        #[test]
-        fn test_no_change_if_preview_or_norep_or_nomatch() -> Result<()> {
-                utility_with_global_mutex(|| {
-                        // base config that *should* result in changes
-                        let base_args = Args {
-                                regex: "(file_.*)".to_string(),
-                                replacement: Some("changed-${1}".to_string()),
-                                recurse: true,
-                                preview: false,
-                        };
+        /// ## Quick Style
+        ///
+        /// - get real value
+        ///     - `let actual = ..`
+        /// - get snapshot value (auto updated if env-var `UPDATE_EXPECT=1`)
+        ///     - `let expected = expect![""]`
+        ///     - `let expected = expect_file!["./file_that_will_hold_snapshot.txt"]`
+        /// - compare
+        ///     - `expected.assert_eq!(&actual)`
+        ///     - `expected.assert_debug_eq!(&actual)`
+        ///
+        #[cfg(test)]
+        mod tests_snapshot {
+                use super::*;
+                use anyhow::Result;
+                use expect_test::{Expect, expect};
+                use test_log::test;
 
-                        // test 0, preamble: verify that base config *does* cause changes to files/dirs
-                        {
+                /// Utility function for snapshot testing: lossly string image of a directory.
+                ///
+                /// Capture directory paths as strings *lossily* and join via `\n`.
+                /// Paths are sorted *prior* to lossy-string conversion.
+                fn utility_capture_directory_tree_as_string(path: &str) -> Result<String> {
+                        let mut entries = utility_collect_directory_state(path)?;
+                        entries.sort();
+                        let formatted = entries
+                                .iter()
+                                .map(|p| p.to_string_lossy().to_string())
+                                .collect::<Vec<_>>()
+                                .join("\n");
+                        Ok(formatted)
+                }
+
+                /// # (¡dev-xplr!) Snapshot (expect-test) replication of a manual test. (Mostly here for Dev Exploration purposes)
+                ///
+                /// # Warning:
+                /// This test manipulates the working directory manipulation (which is a process-wide global state).
+                /// Code execution is controlled by a global mutex to make this function thread-safe.
+                #[test]
+                fn test_snap_directory_structure_after_rename() -> Result<()> {
+                        utility_with_global_mutex(|| {
                                 let temp_dir = utility_test_dir_gen()?;
                                 std::env::set_current_dir(temp_dir.path())?;
 
-                                let mut directory_before_state = utility_collect_directory_state(".")?;
-                                app(&base_args)?;
-                                let mut directory_after_state = utility_collect_directory_state(".")?;
+                                let args = Args {
+                                        regex: "(file_.*)".to_string(),
+                                        replacement: Some("renamed_${1}".to_string()),
+                                        recurse: false,
+                                        preview: false,
+                                };
 
-                                directory_before_state.sort();
-                                directory_after_state.sort();
-
-                                if directory_before_state == directory_after_state {
-                                        tracing::error!(
-                                                "PREAMBLE TEST FAILED: base_args should have caused changes but didn't"
-                                        );
-                                        return Err(anyhow!("Base_args should cause changes but didn't"));
-                                }
-                        }
-
-                        // test 1+, main: verify that various states prevent changes to files/dirs
-                        let nochange_test_cases = [
-                                ("preview_true", Args { preview: true, ..base_args.clone() }),
-                                ("replacement_none", Args { replacement: None, ..base_args.clone() }),
-                                (
-                                        "no_matches",
-                                        Args {
-                                                regex: "no_match_pattern_xyz".to_string(),
-                                                replacement: Some("should_not_be_used".to_string()),
-                                                ..base_args.clone()
-                                        },
-                                ),
-                        ];
-
-                        for (test_name, args) in nochange_test_cases {
-                                let temp_dir = utility_test_dir_gen()?;
-                                std::env::set_current_dir(temp_dir.path())?;
-
-                                let mut directory_before_state = utility_collect_directory_state(".")?;
                                 app(&args)?;
-                                let mut directory_after_state = utility_collect_directory_state(".")?;
-
-                                directory_before_state.sort();
-                                directory_after_state.sort();
-
-                                if directory_before_state != directory_after_state {
-                                        tracing::error!(
-                                                "NO-CHANGE TEST FAILED: \"{}\" should not have changed directory state, but did",
-                                                test_name
-                                        );
-                                        return Err(anyhow!(
-                                                "No-Change test \"{}\" should have resulted in changed directory state, but did",
-                                                test_name
-                                        ));
-                                }
-                        }
-
-                        Ok(())
-                })
-        }
-
-        /// Test invariant: invalid regex should fail early with no directory changes
-        ///
-        /// This is separate from the main 3 prerequisites (preview=false AND replacement=Some AND regex has a match).
-        /// Invalid regex should fail during regex compilation before any filesystem operations occur.
-        ///
-        /// # Warning:
-        /// This test manipulates the working directory manipulation (which is a process-wide global state).
-        /// Code execution is controlled by a global mutex to make this function thread-safe.
-        #[test]
-        fn test_no_changes_if_invalid_regex() -> Result<()> {
-                utility_with_global_mutex(|| {
-                        // base config that *should* result in changes
-                        let base_args = Args {
-                                regex: "(file_.*)".to_string(),
-                                replacement: Some("changed-${1}".to_string()),
-                                recurse: true,
-                                preview: false,
-                        };
-
-                        // test 0, preamble: verify that base config *does* cause changes to files/dirs
-                        {
-                                let temp_dir = utility_test_dir_gen()?;
-                                std::env::set_current_dir(temp_dir.path())?;
-
-                                let mut directory_before_state = utility_collect_directory_state(".")?;
-                                app(&base_args)?;
-                                let mut directory_after_state = utility_collect_directory_state(".")?;
-
-                                directory_before_state.sort();
-                                directory_after_state.sort();
-
-                                if directory_before_state == directory_after_state {
-                                        tracing::error!(
-                                                "PREAMBLE TEST FAILED: base_args should have caused changes but didn't"
-                                        );
-                                        return Err(anyhow!("Base_args should cause changes but didn't"));
-                                }
-                        }
-
-                        let temp_dir = utility_test_dir_gen()?;
-                        std::env::set_current_dir(temp_dir.path())?;
-
-                        let mut directory_before_state = utility_collect_directory_state(".")?;
-
-                        // contains invalid regex (should fail and not modify filesystem)
-                        let invalidregex_args = Args {
-                                regex: "[invalid_regex".to_string(), // Missing closing bracket
-                                ..base_args.clone()
-                        };
-
-                        let result = app(&invalidregex_args);
-                        assert!(result.is_err(), "Invalid regex should result in error");
-
-                        // check error returned
-                        let error_string = format!("{}", result.unwrap_err());
-                        assert!(
-                                error_string.contains("regex") || error_string.contains("parse"),
-                                "Error should mention regex parsing: {}",
-                                error_string
-                        );
-
-                        let mut directory_after_state = utility_collect_directory_state(".")?;
-
-                        // check no changes
-                        directory_before_state.sort();
-                        directory_after_state.sort();
-                        assert_eq!(
-                                directory_before_state, directory_after_state,
-                                "Directory state should be unchanged when regex is invalid"
-                        );
-                        Ok(())
-                })
-        }
-}
-
-/// # Snapshots with `expect-test`
-///
-/// ## Control
-/// 1. env-var controlling expect-test (snapshot lib) behavior: `UPDATE_EXPECT=1`
-/// 2. use *rust-analyzer* lsp **action** to run individual test with update
-#[cfg(test)]
-pub mod tests_snapshot {
-        use anyhow::Result;
-        use expect_test::{Expect, expect};
-        use test_log::test;
-
-        use super::*;
-        use crate::test_pub_utilities::{
-                utility_collect_directory_state, utility_test_dir_gen, utility_with_global_mutex,
-        };
-
-        /// Utility function for snapshot testing: lossly string image of a directory.
-        ///
-        /// Capture directory paths as strings *lossily* and join via `\n`.
-        /// Paths are sorted *prior* to lossy-string conversion.
-        fn utility_capture_directory_tree_as_string(path: &str) -> Result<String> {
-                let mut entries = utility_collect_directory_state(path)?;
-                entries.sort();
-                let formatted = entries
-                        .iter()
-                        .map(|p| p.to_string_lossy().to_string())
-                        .collect::<Vec<_>>()
-                        .join("\n");
-                Ok(formatted)
-        }
-
-        /// # (¡dev-xplr!) Snapshot (expect-test) replication of a manual test. (Mostly here for Dev Exploration purposes)
-        ///
-        /// # Warning:
-        /// This test manipulates the working directory manipulation (which is a process-wide global state).
-        /// Code execution is controlled by a global mutex to make this function thread-safe.
-        #[test]
-        fn test_snap_directory_structure_after_rename() -> Result<()> {
-                utility_with_global_mutex(|| {
-                        let temp_dir = utility_test_dir_gen()?;
-                        std::env::set_current_dir(temp_dir.path())?;
-
-                        let args = Args {
-                                regex: "(file_.*)".to_string(),
-                                replacement: Some("renamed_${1}".to_string()),
-                                recurse: false,
-                                preview: false,
-                        };
-
-                        app(&args)?;
-                        let actual = utility_capture_directory_tree_as_string(".")?;
-                        let expected = expect![[r#"
+                                let actual = utility_capture_directory_tree_as_string(".")?;
+                                let expected = expect![[r#"
                             .
                             ./dir_1
                             ./dir_1/dir_11
@@ -708,42 +720,42 @@ pub mod tests_snapshot {
                             ./renamed_file_0a.txt
                             ./renamed_file_0b.txt
                             ./renamed_file_0c.txt"#]];
-                        expected.assert_eq(&actual);
-                        Ok(())
-                })
-        }
+                                expected.assert_eq(&actual);
+                                Ok(())
+                        })
+                }
 
-        /// Snapshot test: error messages for a small sample of bad pre-regex strings
-        ///
-        /// # Warning:
-        /// This test manipulates the working directory manipulation (which is a process-wide global state).
-        /// Code execution is controlled by a global mutex to make this function thread-safe.
-        #[test]
-        fn test_snap_regex_error_messages() -> Result<()> {
-                // base config that *should* result in changes
-                let base_args = Args {
-                        regex: ".*".to_string(),
-                        replacement: Some("changed-${1}".to_string()),
-                        recurse: true,
-                        preview: false,
-                };
+                /// Snapshot test: error messages for a small sample of bad pre-regex strings
+                ///
+                /// # Warning:
+                /// This test manipulates the working directory manipulation (which is a process-wide global state).
+                /// Code execution is controlled by a global mutex to make this function thread-safe.
+                #[test]
+                fn test_snap_regex_error_messages() -> Result<()> {
+                        // base config that *should* result in changes
+                        let base_args = Args {
+                                regex: ".*".to_string(),
+                                replacement: Some("changed-${1}".to_string()),
+                                recurse: true,
+                                preview: false,
+                        };
 
-                let closure_check = |preregex: &str, expected: Expect| -> Result<()> {
-                        let args_with_bad_preregex = Args { regex: preregex.to_string(), ..base_args.clone() };
+                        let closure_check = |preregex: &str, expected: Expect| -> Result<()> {
+                                let args_with_bad_preregex = Args { regex: preregex.to_string(), ..base_args.clone() };
 
-                        let temp_dir = utility_test_dir_gen()?;
-                        let actual = utility_with_global_mutex(|| {
-                                std::env::set_current_dir(temp_dir.path())?;
-                                app(&args_with_bad_preregex)
-                        });
-                        expected.assert_debug_eq(&actual);
-                        Ok(())
-                };
+                                let temp_dir = utility_test_dir_gen()?;
+                                let actual = utility_with_global_mutex(|| {
+                                        std::env::set_current_dir(temp_dir.path())?;
+                                        app(&args_with_bad_preregex)
+                                });
+                                expected.assert_debug_eq(&actual);
+                                Ok(())
+                        };
 
-                //  "unclosed_bracket"
-                closure_check(
-                        r"[unclosed",
-                        expect![[r#"
+                        //  "unclosed_bracket"
+                        closure_check(
+                                r"[unclosed",
+                                expect![[r#"
                             Err(
                                 Regex(
                                     Syntax(
@@ -757,12 +769,12 @@ pub mod tests_snapshot {
                                 ),
                             )
                         "#]],
-                )?;
+                        )?;
 
-                //  "empty_named_group"
-                closure_check(
-                        r"(?P<>)",
-                        expect![[r#"
+                        //  "empty_named_group"
+                        closure_check(
+                                r"(?P<>)",
+                                expect![[r#"
                             Err(
                                 Regex(
                                     Syntax(
@@ -776,12 +788,12 @@ pub mod tests_snapshot {
                                 ),
                             )
                         "#]],
-                )?;
+                        )?;
 
-                //  "trailing_backslash"
-                closure_check(
-                        r"\",
-                        expect![[r#"
+                        //  "trailing_backslash"
+                        closure_check(
+                                r"\",
+                                expect![[r#"
                             Err(
                                 Regex(
                                     Syntax(
@@ -795,32 +807,32 @@ pub mod tests_snapshot {
                                 ),
                             )
                         "#]],
-                )?;
+                        )?;
 
-                Ok(())
-        }
+                        Ok(())
+                }
 
-        /// Snapshot test: error messages for a small sample of bad replacement values
-        ///
-        /// # Warning:
-        /// This test manipulates the working directory manipulation (which is a process-wide global state).
-        /// Code execution is controlled by a global mutex to make this function thread-safe.
-        #[test]
-        fn test_snap_rep_error_messages() -> Result<()> {
-                const AMBIG_REP_EXAMPLE: &str = r"$1text";
-                let args = Args {
-                        regex: r".*".to_string(),
-                        replacement: Some(AMBIG_REP_EXAMPLE.to_string()),
-                        recurse: true,
-                        preview: true,
-                };
-                let temp_dir = utility_test_dir_gen()?;
+                /// Snapshot test: error messages for a small sample of bad replacement values
+                ///
+                /// # Warning:
+                /// This test manipulates the working directory manipulation (which is a process-wide global state).
+                /// Code execution is controlled by a global mutex to make this function thread-safe.
+                #[test]
+                fn test_snap_rep_error_messages() -> Result<()> {
+                        const AMBIG_REP_EXAMPLE: &str = r"$1text";
+                        let args = Args {
+                                regex: r".*".to_string(),
+                                replacement: Some(AMBIG_REP_EXAMPLE.to_string()),
+                                recurse: true,
+                                preview: true,
+                        };
+                        let temp_dir = utility_test_dir_gen()?;
 
-                let actual = utility_with_global_mutex(|| {
-                        std::env::set_current_dir(temp_dir.path())?;
-                        app(&args)
-                });
-                let expected = expect![[r#"
+                        let actual = utility_with_global_mutex(|| {
+                                std::env::set_current_dir(temp_dir.path())?;
+                                app(&args)
+                        });
+                        let expected = expect![[r#"
                     Err(
                         AmbiguousReplacementSyntax {
                             ambiguous_whole: "$1text",
@@ -828,31 +840,32 @@ pub mod tests_snapshot {
                         },
                     )
                 "#]];
-                expected.assert_debug_eq(&actual);
+                        expected.assert_debug_eq(&actual);
 
-                Ok(())
+                        Ok(())
+                }
+
+                // /// Test regex replacement examples snapshot
+                // #[test]
+                // fn test_snap_replacement_examples() -> Result<()> {
+                //         let test_cases = vec![
+                //                 ("file_123.txt", r"(\d+)", "num_${1}"),
+                //                 ("CamelCase.rs", r"([A-Z])", "_${1}"),
+                //                 ("test_file.txt", r"test_", "new_"),
+                //         ];
+
+                //         let mut results = Vec::new();
+                //         for (input, pattern, replacement) in test_cases {
+                //                 let re = Regex::new(pattern)?;
+                //                 let result = re.replace(input, replacement);
+                //                 results.push(format!("{} -> {}", input, result));
+                //         }
+
+                //         let formatted_results = results.join("\n");
+                //         assert_snapshot!("replacement_examples", formatted_results);
+                //         Ok(())
+                // }
         }
-
-        // /// Test regex replacement examples snapshot
-        // #[test]
-        // fn test_snap_replacement_examples() -> Result<()> {
-        //         let test_cases = vec![
-        //                 ("file_123.txt", r"(\d+)", "num_${1}"),
-        //                 ("CamelCase.rs", r"([A-Z])", "_${1}"),
-        //                 ("test_file.txt", r"test_", "new_"),
-        //         ];
-
-        //         let mut results = Vec::new();
-        //         for (input, pattern, replacement) in test_cases {
-        //                 let re = Regex::new(pattern)?;
-        //                 let result = re.replace(input, replacement);
-        //                 results.push(format!("{} -> {}", input, result));
-        //         }
-
-        //         let formatted_results = results.join("\n");
-        //         assert_snapshot!("replacement_examples", formatted_results);
-        //         Ok(())
-        // }
 }
 
 // #[cfg(test)]
