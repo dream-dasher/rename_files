@@ -22,7 +22,7 @@ pub enum Error {
         WalkDir(#[from] walkdir::Error),
 
         /// User provided ambiguous replacement syntax
-        #[error("{}", format_ambiguous_replacement(.ambiguous_whole))]
+        #[error("{}", format_ambiguous_replacement(ambiguous_whole))]
         AmbiguousReplacementSyntax { ambiguous_whole: String, ambiguous_head: String },
 }
 
