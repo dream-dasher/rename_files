@@ -19,15 +19,12 @@ use walkdir::WalkDir;
 pub struct Args {
         /// (Rust flavor) regex to search filenames with.
         regex: String,
-
         /// Replacement string for regex matches. Use `$1` or `${1}`, etc. to reference capture groups.
         #[arg(long = "rep")]
         replacement: Option<String>,
-
         /// Recurse into child directories.
         #[arg(short, long)]
         recurse: bool,
-
         /// Show replacements that would occur, but don't rename files.
         #[arg(short, long)]
         preview: bool,
