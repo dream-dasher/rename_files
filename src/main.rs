@@ -10,14 +10,14 @@ use clap::Parser;
 use rename_files::{Args, app, error::Result, logging};
 
 fn main() -> Result<()> {
-        logging::tracing_subscribe_boilerplate("warn");
-        let args = Args::parse();
+    logging::tracing_subscribe_boilerplate("warn");
+    let args = Args::parse();
 
-        match app(&args) {
-                Ok(()) => Ok(()), // ensures that change to app success value isn't erased by call code
-                Err(e) => {
-                        eprintln!("Error: {}", e); // bubling error will not pretty-print cause
-                        std::process::exit(1);
-                }
+    match app(&args) {
+        Ok(()) => Ok(()), // ensures that change to app success value isn't erased by call code
+        Err(e) => {
+            eprintln!("Error: {}", e); // bubling error will not pretty-print cause
+            std::process::exit(1);
         }
+    }
 }
