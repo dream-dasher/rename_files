@@ -33,11 +33,7 @@ pub struct Args {
 /// Application code.  (main in lib.rs)
 #[tracing::instrument]
 pub fn app(args: &Args) -> Result<()> {
-    // let re = Regex::new(&args.regex)?;
-    // TODO: check
     let re = Regex::new(&args.regex)?;
-    //
-
     if let Some(replacement) = &args.replacement {
         check_for_common_syntax_error(replacement)?;
     }
