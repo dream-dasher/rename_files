@@ -37,16 +37,15 @@ NC='\033[0m' # No Color
 
 ##====================================================================================##
 package_name="CRATE_NAME" # MANUALLY add package name here
-test_coverage_min=50           # below this result the `coverage` test will fail
+test_coverage_min=50      # below this result the `coverage` test will fail
 ##====================================================================================##
 
 ##====================================================================================##
 echo -e "${DARK_GRAY}==============${YELLOW}Beginning of Pre-Commit Hook Script${DARK_GRAY}===============${NC}"
 
-
 echo -e "${DARK_GRAY}================================================================${NC}"
 echo -e "${YELLOW} formatting... ${NC}"
-cargo fmt
+cargo +nightly fmt
 echo -e "${GREEN} Format successful. ${NC}"
 echo -e "${DARK_GRAY}================================================================${NC}"
 
