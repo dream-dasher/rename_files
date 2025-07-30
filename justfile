@@ -52,7 +52,7 @@ check: && _date
     cargo check --workspace --all-targets --all-features
     cargo clippy --workspace --all-targets --all-features
     cargo test --workspace --all-features --no-run
-    cargo fmt
+    cargo +nightly fmt
     typos
     committed
     cargo machete
