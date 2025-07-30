@@ -1,10 +1,9 @@
 [package]
 name = "rename_files"
 version = "0.5.0"
-authors = ["Ethan Skowronski-Lutz"]
+authors = ["Ethan Skowronski-Lutz <33399972+dream-dasher@users.noreply.github.com>"]
 edition = "2024"
-repository = "https://github.com/ethanmsl/rename_files"
-homepage = "https://ethanmsl.github.io/rename_files/"
+repository = "https://github.com/dream-dasher/rename_files"
 categories = ["command-line-utilities", "file-system", "text-processing"]
 publish = true
 description = "CLI tool (& lib); regex search files & optionally rename. Recursive and Test flags available, but intentionally minimal."
