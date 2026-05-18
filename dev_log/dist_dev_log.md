@@ -1,7 +1,7 @@
 # dev_log `dist` branch
 
 ### Goal
-Simplfying generation of code that can be easily consumed by 3rd parties.
+Simplifying generation of code that can be easily consumed by 3rd parties.
 in particular:
 - generating binaries for various architectures
 - generating binaries downloadable by package managers (just **homebrew**, rn)

@@ -80,7 +80,7 @@ All notable changes to this project will be documented in this file.
 
 ### Build
 
-- *(fix)* Corrected (hombrew) tap name
+- *(fix)* Corrected (homebrew) tap name
 
 ## [0.3.2] - 2024-07-13
 
